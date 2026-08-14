@@ -1,15 +1,24 @@
 import { Geist, Geist_Mono } from "next/font/google"
-
+import type { Metadata } from "next"
 import "@workspace/ui/globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
-import { cn } from "@workspace/ui/lib/utils";
+import { cn } from "@workspace/ui/lib/utils"
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'})
+const geist = Geist({ subsets: ["latin"], variable: "--font-sans" })
 
 const fontMono = Geist_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
 })
+
+export const metadata: Metadata = {
+  title: "Zuno - A launch platform for your products | BackIt",
+  description:
+    "BackIt is a product launch platform where developers and founders list projects, get discovered, and receive community engagement through upvotes, hearts, and saves.",
+  icons: {
+    icon: "/BackIt.svg",
+  },
+}
 
 export default function RootLayout({
   children,
@@ -20,7 +29,12 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={cn("antialiased", fontMono.variable, "font-sans", geist.variable)}
+      className={cn(
+        "antialiased",
+        fontMono.variable,
+        "font-sans",
+        geist.variable
+      )}
     >
       <body>
         <ThemeProvider>{children}</ThemeProvider>
