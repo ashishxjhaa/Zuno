@@ -1,8 +1,8 @@
 import { Geist, Geist_Mono } from "next/font/google"
 import type { Metadata } from "next"
 import "@workspace/ui/globals.css"
-import { ThemeProvider } from "@/components/theme-provider"
 import { cn } from "@workspace/ui/lib/utils"
+import { AppContextProvider } from "./providers"
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" })
 
@@ -15,9 +15,9 @@ export const metadata: Metadata = {
   title: "Zuno - A launch platform for your products | BackIt",
   description:
     "BackIt is a product launch platform where developers and founders list projects, get discovered, and receive community engagement through upvotes, hearts, and saves.",
-  icons: {
-    icon: "/BackIt.svg",
-  },
+  // icons: {
+  //   icon: "/BackIt.svg",
+  // },
 }
 
 export default function RootLayout({
@@ -37,7 +37,7 @@ export default function RootLayout({
       )}
     >
       <body>
-        <ThemeProvider>{children}</ThemeProvider>
+        <AppContextProvider>{children}</AppContextProvider>
       </body>
     </html>
   )
