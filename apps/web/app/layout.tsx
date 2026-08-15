@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import "@workspace/ui/globals.css"
 import { cn } from "@workspace/ui/lib/utils"
 import { AppContextProvider } from "./providers"
+import { Toaster } from "@workspace/ui/components/sonner"
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" })
 
@@ -37,7 +38,10 @@ export default function RootLayout({
       )}
     >
       <body>
-        <AppContextProvider>{children}</AppContextProvider>
+        <AppContextProvider>
+          <Toaster position="top-right" richColors />
+          {children}
+        </AppContextProvider>
       </body>
     </html>
   )
