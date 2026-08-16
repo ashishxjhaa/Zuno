@@ -1,6 +1,6 @@
 "use client"
 
-import {
+import React, {
   createContext,
   useCallback,
   useContext,
@@ -9,6 +9,7 @@ import {
 } from "react"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
+import debounce from "lodash.debounce"
 
 type AppContextType = {
   user: null
@@ -30,6 +31,8 @@ type AppContextType = {
   loadProject: (id: string, silent?: boolean) => Promise<void>
   handleGenerate: (prompt: string) => Promise<void>
   handleDelete: (id: string) => Promise<void>
+  handleChat: (prompt: string) => Promise<void>
+  updateProjectFiles: (files: Record<string, string>) => Promise<void>
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined)
@@ -66,7 +69,7 @@ export function AppContextProvider({
 
   useEffect(() => {
     checkSession()
-  }, [checkSession])
+  }, [])
 
   const login = async (email, password) => {
     try {
@@ -207,6 +210,58 @@ export function AppContextProvider({
     [user]
   )
 
+  const handleChat = useCallback(
+    async (prompt) => {
+      if (!activeProject || !user) return
+      setChatLoading(true)
+      try {
+        const { data } = await api.post(
+          `/api/projects/${activeProject._id}/chat`,
+          { prompt }
+        )
+        setActiveProject(data)
+        if (data.errors && data.lenght > 0) {
+          toast.error(`${data.error.length} revision patch(es) failed`)
+        } else {
+          toast.success(`Updated to version ${data.version}`)
+        }
+      } catch (err) {
+        console.error("Revision request failed:", err)
+        toast.error(err?.response?.data?.error || "Revision request failed")
+      } finally {
+        setChatLoading(false)
+      }
+    },
+    [activeProject, user]
+  )
+
+  const debouncedSave = React.useMemo(
+    () =>
+      debounce(async (files, id) => {
+        try {
+          await api.put(`/api/projects/${id}/files`, { files })
+        } catch (err) {
+          console.error("Failed to auto-save files:", err)
+          toast.error("Failed to save code modifications")
+        }
+      }, 1000),
+    []
+  )
+
+  useEffect(() => {
+    return () => {
+      debouncedSave.flush()
+    }
+  }, [debouncedSave])
+
+  const updateProjectFiles = useCallback(
+    async (files) => {
+      if (!activeProject || !user) return
+      debouncedSave(files, activeProject._id)
+    },
+    [activeProject, user, debouncedSave]
+  )
+
   return (
     <AppContext.Provider
       value={{
@@ -229,6 +284,8 @@ export function AppContextProvider({
         loadProject,
         handleGenerate,
         handleDelete,
+        handleChat,
+        updateProjectFiles,
       }}
     >
       {children}
