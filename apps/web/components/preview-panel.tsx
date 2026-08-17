@@ -82,6 +82,7 @@ const PreviewPanel = ({ project, activeFile, showCode }) => {
         active: path === activeFile,
       }
     }
+    return spFiles
   }, [liveFiles, activeFile])
 
   const dependencies = useMemo(() => {
