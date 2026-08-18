@@ -3,6 +3,7 @@ import "dotenv/config"
 import cors from "cors"
 import cookieParser from "cookie-parser"
 import authRouter from "./src/routes/auth.routes"
+import projectRouter from "./src/routes/project.routes"
 
 const app = express()
 
@@ -12,6 +13,7 @@ app.use(express.json())
 
 app.get("/", (req, res) => res.send("Server is Live!"))
 app.use("/api/auth", authRouter)
+app.use("/api/projects", projectRouter)
 
 app.use((err, _req, res, _next) => {
   console.error(`[Error] ${err.message}`)
