@@ -1,5 +1,6 @@
 import { prisma } from "../../db/db"
 import crypto from "crypto"
+import { generateProject } from "../services/ai"
 
 export async function createProject(req, res) {
   const { prompt } = req.body
@@ -68,7 +69,101 @@ export async function createProject(req, res) {
   })
 }
 
-async function runBackgroundGeneration(projectId, prompt) {}
+async function runBackgroundGeneration(projectId, prompt) {
+  try {
+    console.log(`[Background AI] Starting generation for project ${projectId}`)
+
+    const result = await generateProject(prompt, {
+      onPlan: async (plan) => {
+        console.log(
+          `[Background AI] Plan created for project ${projectId}. Planned ${plan.files.length} files.`
+        )
+
+        const fileList = plan.files
+          .map((f) => `- \`${f.path}\`: ${f.description}`)
+          .join("\n")
+
+        await prisma.project.update({
+          where: { id: projectId },
+          data: {
+            name: plan.projectName || "Generated Project",
+            status: "generating",
+            filesPlanned: plan.files,
+            messages: {
+              create: {
+                role: "assistant",
+                content: `Planned website structure:\n${fileList}`,
+                timestamp: new Date(),
+              },
+            },
+          },
+        })
+      },
+      onFileStart: async (path) => {
+        console.log(
+          `[Background AI] Starting file ${path} for project ${projectId}`
+        )
+        await prisma.project.update({
+          where: { id: projectId },
+          data: { currentFile: path },
+        })
+      },
+
+      onFileComplete: async (path, code) => {
+        console.log(
+          `[Background AI] Finished file ${path} for project ${projectId}`
+        )
+
+        const project = await prisma.project.findFirst(projectId)
+
+        if (project) {
+          project.files = project.files || {}
+          project.files[path] = { content: code, hash: hashContent(code) }
+          project.filesGenerated = [...(project.filesGenerated || []), path]
+          project.messages.push({
+            role: "assistant",
+            content: `Created file "${path}"`,
+            timestamp: new Date(),
+          })
+          project.currentFile = null
+          project.markModified("files")
+          await project.save()
+        }
+      },
+    })
+
+    console.log(`[Background AI] Successfully generated project ${projectId}`)
+
+    const project = await prisma.project.findFirst(projectId)
+    if (project) {
+      project.status = "completed"
+      project.version = 1
+      if (result.description) {
+        project.name = result.description
+      }
+      project.messages.push({
+        role: "assistant",
+        content: `Website generation complete! You can view and edit the files`,
+        timestamp: new Date(),
+      })
+      await project.save()
+    }
+  } catch (err) {
+    console.error(`[Background AI] Fatal generation error for project ${projectId}:`, err)
+    await prisma.project.update({
+      where: projectId, data: {
+        status: "failed",
+        error: err.message,
+        $push: {
+          messages: {
+            role: "assistant",
+            content: `Generation failed: ${err.message}`
+            timestamp: new Date()
+          }
+        }
+    }})
+  }
+}
 
 export async function listProjects(req, res) {
   if (!req.user) {
