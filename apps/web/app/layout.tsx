@@ -1,24 +1,29 @@
-import { Geist, Geist_Mono } from "next/font/google"
+import { Schibsted_Grotesk } from "next/font/google"
 import type { Metadata } from "next"
 import "@workspace/ui/globals.css"
 import { cn } from "@workspace/ui/lib/utils"
-import { AppContextProvider } from "./providers"
 import { Toaster } from "@workspace/ui/components/sonner"
+import { AppContextProvider } from "./providers"
 
-const geist = Geist({ subsets: ["latin"], variable: "--font-sans" })
-
-const fontMono = Geist_Mono({
+const schibstedGrotesk = Schibsted_Grotesk({
   subsets: ["latin"],
-  variable: "--font-mono",
+  variable: "--font-sans",
 })
 
 export const metadata: Metadata = {
-  title: "Zuno - A launch platform for your products | BackIt",
+  title: {
+    default: "Zuno",
+    template: "%s · Zuno",
+  },
   description:
-    "BackIt is a product launch platform where developers and founders list projects, get discovered, and receive community engagement through upvotes, hearts, and saves.",
-  // icons: {
-  //   icon: "/BackIt.svg",
-  // },
+    "Zuno is an AI website builder. Describe an idea and get a live Vite + React + TypeScript site you can iterate on through chat.",
+  icons: {
+    icon: [
+      { url: "/zuno.svg", type: "image/svg+xml" },
+      { url: "/zuno.png" },
+    ],
+    apple: "/zuno.png",
+  },
 }
 
 export default function RootLayout({
@@ -29,17 +34,12 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      className={cn("dark antialiased", schibstedGrotesk.variable, "font-sans")}
       suppressHydrationWarning
-      className={cn(
-        "antialiased",
-        fontMono.variable,
-        "font-sans",
-        geist.variable
-      )}
     >
       <body>
         <AppContextProvider>
-          <Toaster position="top-right" richColors />
+          <Toaster position="bottom-right" richColors />
           {children}
         </AppContextProvider>
       </body>
