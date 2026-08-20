@@ -30,6 +30,7 @@ export type ProjectDetail = ProjectSummary & {
   conversationHistory: ConversationItem[]
   previewUrl: string | null
   isGenerating: boolean
+  files: Record<string, string>
 }
 
 export type AuthResponse = {

@@ -16,7 +16,8 @@ import {
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
 import { AuthError } from "@/lib/auth"
-import { readPendingPrompt } from "@/lib/pending-prompt"
+import { clearPendingPrompt, readPendingPrompt } from "@/lib/pending-prompt"
+import { createProject } from "@/lib/projects"
 import { useSession } from "@/lib/session"
 
 type AuthMode = "signin" | "signup"
@@ -87,10 +88,20 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
   const fields = isSignin ? SIGNIN_FIELDS : SIGNUP_FIELDS
 
   useEffect(() => {
-    if (!isLoading && user) {
-      router.replace("/")
+    if (isLoading || !user) {
+      return
     }
-  }, [isLoading, user, router])
+
+    const pending = readPendingPrompt()
+    if (pending) {
+      const project = createProject(pending)
+      clearPendingPrompt()
+      router.replace(`/builder/${project.id}`)
+      return
+    }
+
+    router.replace(safeNextPath(searchParams.get("next")))
+  }, [isLoading, user, router, searchParams])
 
   if (!isLoading && user) {
     return null
@@ -126,13 +137,6 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
       }
 
       toast.success(isSignin ? "Welcome back." : "Account created.")
-
-      if (readPendingPrompt()) {
-        router.push("/")
-        return
-      }
-
-      router.push(safeNextPath(searchParams.get("next")))
     } catch (error) {
       toast.error(
         error instanceof AuthError ? error.message : "Something went wrong"

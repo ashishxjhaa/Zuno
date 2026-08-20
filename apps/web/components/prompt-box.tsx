@@ -8,12 +8,14 @@ import { createProjectSchema } from "@workspace/shared"
 import { Button } from "@workspace/ui/components/button"
 import { Button as MovingBorder } from "@workspace/ui/components/moving-border"
 import { Textarea } from "@workspace/ui/components/textarea"
-import { savePendingPrompt } from "@/lib/pending-prompt"
+import { clearPendingPrompt, savePendingPrompt } from "@/lib/pending-prompt"
+import { useProjects } from "@/lib/use-projects"
 import { useSession } from "@/lib/session"
 
 export function PromptBox() {
   const router = useRouter()
   const { user } = useSession()
+  const { create } = useProjects()
   const [value, setValue] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -34,7 +36,9 @@ export function PromptBox() {
     }
 
     toast.success("Starting your project…")
-    router.push("/")
+    const project = create(parsed.data.initialPrompt)
+    clearPendingPrompt()
+    router.push(`/builder/${project.id}`)
     setIsSubmitting(false)
   }
 
