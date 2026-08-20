@@ -7,7 +7,7 @@ import { cn } from "@workspace/ui/lib/utils"
 import { useSession } from "@/lib/session"
 
 export function SiteHeader() {
-  const { user } = useSession()
+  const { user, signout } = useSession()
 
   return (
     <header className="fixed top-0 right-0 left-0 z-50 border-b border-white/10 bg-black/40 text-white backdrop-blur-md">
@@ -21,10 +21,11 @@ export function SiteHeader() {
           {user ? (
             <>
               <span className="px-2 text-sm text-muted-foreground">
-                {user.username}
+                {user.name}
               </span>
               <button
                 type="button"
+                onClick={signout}
                 className={cn(
                   buttonVariants({ variant: "outline", size: "sm" })
                 )}

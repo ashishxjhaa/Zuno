@@ -1,11 +1,17 @@
 import { z } from "zod"
 
-const usernameSchema = z
+const nameSchema = z
   .string()
   .trim()
-  .min(3, "Username must be at least 3 characters")
-  .max(32, "Username must be at most 32 characters")
-  .regex(/^[a-zA-Z0-9_]+$/, "Username can only contain letters, numbers, and underscores")
+  .min(2, "Full name must be at least 2 characters")
+  .max(80, "Full name must be at most 80 characters")
+
+const emailSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .email("Enter a valid email")
+  .max(254, "Email is too long")
 
 const passwordSchema = z
   .string()
@@ -13,12 +19,13 @@ const passwordSchema = z
   .max(72, "Password must be at most 72 characters")
 
 export const signupSchema = z.object({
-  username: usernameSchema,
+  name: nameSchema,
+  email: emailSchema,
   password: passwordSchema,
 })
 
 export const signinSchema = z.object({
-  username: usernameSchema,
+  email: emailSchema,
   password: z.string().min(1, "Password is required"),
 })
 

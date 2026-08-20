@@ -4,7 +4,8 @@ export type ToolCallKind = "READ_FILE" | "WRITE_FILE" | "DELETE_FILE" | "UPDATE_
 
 export type PublicUser = {
   id: string
-  username: string
+  name: string
+  email: string
 }
 
 export type ConversationItem = {

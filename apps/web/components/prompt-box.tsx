@@ -34,7 +34,7 @@ export function PromptBox() {
     }
 
     toast.success("Starting your project…")
-    router.push("/builder/preview")
+    router.push("/")
     setIsSubmitting(false)
   }
 
