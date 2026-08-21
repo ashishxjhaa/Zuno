@@ -4,53 +4,62 @@ import { useState, type FormEvent, type KeyboardEvent } from "react"
 import { useRouter } from "next/navigation"
 import { ArrowRightIcon, Loader2Icon } from "lucide-react"
 import { toast } from "sonner"
-import { createProjectSchema } from "@workspace/shared"
 import { Button } from "@workspace/ui/components/button"
 import { Button as MovingBorder } from "@workspace/ui/components/moving-border"
 import { Textarea } from "@workspace/ui/components/textarea"
-import { clearPendingPrompt, savePendingPrompt } from "@/lib/pending-prompt"
-import { useProjects } from "@/lib/use-projects"
+import { frontend } from "@/lib/api"
 import { useSession } from "@/lib/session"
 
 export function PromptBox() {
   const router = useRouter()
   const { user } = useSession()
-  const { create } = useProjects()
   const [value, setValue] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const submitPrompt = async (raw: string) => {
-    const parsed = createProjectSchema.safeParse({ initialPrompt: raw })
-    if (!parsed.success) {
-      toast.error(parsed.error.issues[0]?.message ?? "Enter a prompt")
+  const submit = async () => {
+    if (!value.trim()) {
+      toast.error("Describe what you want to build")
+      return
+    }
+
+    if (!user) {
+      router.push("/signin")
       return
     }
 
     setIsSubmitting(true)
-    savePendingPrompt(parsed.data.initialPrompt)
+    try {
+      const res = await frontend.post("/api/v1/project", {
+        initialPrompt: value,
+      })
+      router.push(`/builder/${res.data.id}`)
+    } catch (error: any) {
+      const err = error.response.data.error
+      if (typeof err === "string") {
+        toast.error(err)
+        return
+      }
 
-    if (!user) {
+      for (const messages of Object.values(err.fieldErrors)) {
+        if (Array.isArray(messages) && typeof messages[0] === "string") {
+          toast.error(messages[0])
+          return
+        }
+      }
+    } finally {
       setIsSubmitting(false)
-      router.push("/signin?next=/")
-      return
     }
-
-    toast.success("Starting your project…")
-    const project = create(parsed.data.initialPrompt)
-    clearPendingPrompt()
-    router.push(`/builder/${project.id}`)
-    setIsSubmitting(false)
   }
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    void submitPrompt(value)
+    void submit()
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault()
-      void submitPrompt(value)
+      void submit()
     }
   }
 
@@ -77,7 +86,7 @@ export function PromptBox() {
           <Button
             type="submit"
             size="sm"
-            disabled={isSubmitting || !value.trim()}
+            disabled={isSubmitting}
           >
             {isSubmitting ? (
               <Loader2Icon className="animate-spin" />

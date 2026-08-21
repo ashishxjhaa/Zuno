@@ -31,3 +31,5 @@ logs
 
 # Finder (MacOS) folder config
 .DS_Store
+
+/src/generated/prisma

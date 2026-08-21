@@ -3,6 +3,7 @@
 import Image from "next/image"
 import Link from "next/link"
 import { LogOutIcon } from "lucide-react"
+import { MagneticButton } from "@workspace/ui/components/magnetic-button"
 import { buttonVariants } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
 import { useSession } from "@/lib/session"
@@ -26,16 +27,15 @@ export function SiteHeader({ wide = false }: { wide?: boolean }) {
         <nav className="flex items-center gap-2">
           {user ? (
             <>
-              <span className="rounded-md border border-dashed border-[#ff5800] px-2.5 py-1 text-sm text-foreground">
-                {user.name}
-              </span>
+              <MagneticButton>
+                <span className="inline-flex rounded-md bg-white px-4 py-2 text-sm font-medium text-neutral-900">
+                  {user.name}
+                </span>
+              </MagneticButton>
               <button
                 type="button"
-                onClick={signout}
-                className={cn(
-                  buttonVariants({ size: "sm" }),
-                  "gap-1.5 border-transparent bg-[#ef4444] text-white hover:bg-[#dc2626]"
-                )}
+                onClick={() => void signout()}
+                className="inline-flex items-center gap-1.5 rounded-md bg-[#ef4444] px-4 py-2 text-sm font-medium text-white hover:bg-[#dc2626]"
               >
                 <LogOutIcon className="size-3.5" />
                 Sign out

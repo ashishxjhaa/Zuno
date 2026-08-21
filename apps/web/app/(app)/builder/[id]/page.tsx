@@ -5,12 +5,11 @@ export const metadata: Metadata = {
   title: "Builder",
 }
 
-type BuilderPageProps = {
+export default async function BuilderPage({
+  params,
+}: {
   params: Promise<{ id: string }>
-}
-
-export default async function BuilderPage({ params }: BuilderPageProps) {
+}) {
   const { id } = await params
-
   return <BuilderWorkspace projectId={id} />
 }

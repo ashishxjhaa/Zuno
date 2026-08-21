@@ -1,10 +1,9 @@
 "use client"
 
-import { useEffect, useState, type FormEvent } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useState, type FormEvent } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { toast } from "sonner"
-import { signinSchema, signupSchema } from "@workspace/shared"
 import { Button } from "@workspace/ui/components/button"
 import {
   Card,
@@ -15,13 +14,9 @@ import {
 } from "@workspace/ui/components/card"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
-import { AuthError } from "@/lib/auth"
-import { clearPendingPrompt, readPendingPrompt } from "@/lib/pending-prompt"
-import { createProject } from "@/lib/projects"
 import { useSession } from "@/lib/session"
 
 type AuthMode = "signin" | "signup"
-type AuthField = "name" | "email" | "password"
 
 const SIGNIN_FIELDS = [
   {
@@ -64,85 +59,38 @@ const SIGNUP_FIELDS = [
   },
 ] as const
 
-function safeNextPath(value: string | null): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) {
-    return "/"
-  }
-
-  return value
-}
-
-function isAuthField(value: unknown): value is AuthField {
-  return value === "name" || value === "email" || value === "password"
-}
-
 export function AuthForm({ mode }: { mode: AuthMode }) {
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const { user, isLoading, signin, signup } = useSession()
+  const { signin, signup } = useSession()
   const [values, setValues] = useState({ name: "", email: "", password: "" })
-  const [errors, setErrors] = useState<Partial<Record<AuthField, string>>>({})
-  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const isSignin = mode === "signin"
   const fields = isSignin ? SIGNIN_FIELDS : SIGNUP_FIELDS
 
-  useEffect(() => {
-    if (isLoading || !user) {
-      return
-    }
-
-    const pending = readPendingPrompt()
-    if (pending) {
-      const project = createProject(pending)
-      clearPendingPrompt()
-      router.replace(`/builder/${project.id}`)
-      return
-    }
-
-    router.replace(safeNextPath(searchParams.get("next")))
-  }, [isLoading, user, router, searchParams])
-
-  if (!isLoading && user) {
-    return null
-  }
-
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    const parsed = isSignin
-      ? signinSchema.safeParse(values)
-      : signupSchema.safeParse(values)
-
-    if (!parsed.success) {
-      const fieldErrors: Partial<Record<AuthField, string>> = {}
-      for (const issue of parsed.error.issues) {
-        const key = issue.path[0]
-        if (isAuthField(key)) {
-          fieldErrors[key] ??= issue.message
-        }
-      }
-      setErrors(fieldErrors)
-      return
-    }
-
-    setErrors({})
-    setIsSubmitting(true)
-
     try {
       if (isSignin) {
-        await signin(parsed.data)
+        await signin(values.email, values.password)
+        router.push("/")
       } else {
-        await signup(parsed.data)
+        await signup(values.name, values.email, values.password)
+        router.push("/signin")
+      }
+    } catch (error: any) {
+      const err = error.response.data.error
+      if (typeof err === "string") {
+        toast.error(err)
+        return
       }
 
-      toast.success(isSignin ? "Welcome back." : "Account created.")
-    } catch (error) {
-      toast.error(
-        error instanceof AuthError ? error.message : "Something went wrong"
-      )
-    } finally {
-      setIsSubmitting(false)
+      for (const messages of Object.values(err.fieldErrors)) {
+        if (Array.isArray(messages) && typeof messages[0] === "string") {
+          toast.error(messages[0])
+          return
+        }
+      }
     }
   }
 
@@ -174,15 +122,11 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
                     [field.name]: event.target.value,
                   }))
                 }
-                disabled={isSubmitting}
               />
-              {errors[field.name] ? (
-                <p className="text-xs text-destructive">{errors[field.name]}</p>
-              ) : null}
             </div>
           ))}
 
-          <Button type="submit" className="w-full" disabled={isSubmitting}>
+          <Button type="submit" className="w-full">
             {isSignin ? "Sign in" : "Sign up"}
           </Button>
         </form>

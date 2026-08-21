@@ -2,70 +2,66 @@
 
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
-  useMemo,
   useState,
   type ReactNode,
 } from "react"
-import type { PublicUser, SigninInput, SignupInput } from "@workspace/shared"
-import {
-  AuthError,
-  clearMockUser,
-  readMockUser,
-  signinMockUser,
-  signupMockUser,
-} from "@/lib/auth"
+import { frontend } from "@/lib/api"
 
-type SessionContextValue = {
-  user: PublicUser | null
-  isLoading: boolean
-  signin: (input: SigninInput) => Promise<void>
-  signup: (input: SignupInput) => Promise<void>
-  signout: () => void
+type User = {
+  id: string
+  name: string
+  email: string
 }
 
-const SessionContext = createContext<SessionContextValue | undefined>(undefined)
+const SessionContext = createContext<{
+  user: User | null
+  isLoading: boolean
+  signin: (email: string, password: string) => Promise<void>
+  signup: (name: string, email: string, password: string) => Promise<void>
+  signout: () => Promise<void>
+} | null>(null)
 
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<PublicUser | null>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    setUser(readMockUser())
-    setIsLoading(false)
+    frontend
+      .get("/api/v1/auth/me")
+      .then((res) => setUser(res.data.user))
+      .catch(() => setUser(null))
+      .finally(() => setIsLoading(false))
   }, [])
 
-  const signin = useCallback(async (input: SigninInput) => {
-    setUser(signinMockUser(input.email))
-  }, [])
+  async function signin(email: string, password: string) {
+    const res = await frontend.post("/api/v1/auth/signin", { email, password })
+    setUser(res.data.user)
+  }
 
-  const signup = useCallback(async (input: SignupInput) => {
-    setUser(signupMockUser(input.name, input.email))
-  }, [])
+  async function signup(name: string, email: string, password: string) {
+    await frontend.post("/api/v1/auth/signup", { name, email, password })
+  }
 
-  const signout = useCallback(() => {
-    clearMockUser()
+  async function signout() {
+    await frontend.post("/api/v1/auth/signout")
     setUser(null)
-  }, [])
-
-  const value = useMemo(
-    () => ({ user, isLoading, signin, signup, signout }),
-    [user, isLoading, signin, signup, signout]
-  )
+  }
 
   return (
-    <SessionContext.Provider value={value}>{children}</SessionContext.Provider>
+    <SessionContext.Provider
+      value={{ user, isLoading, signin, signup, signout }}
+    >
+      {children}
+    </SessionContext.Provider>
   )
 }
 
-export function useSession(): SessionContextValue {
+export function useSession() {
   const context = useContext(SessionContext)
   if (!context) {
     throw new Error("useSession must be used within a SessionProvider")
   }
   return context
 }
-
-export { AuthError }

@@ -6,18 +6,18 @@ import express, {
 import "dotenv/config"
 import cors from "cors"
 import cookieParser from "cookie-parser"
+import { authRouter } from "./routes/auth.routes"
+import { projectRouter } from "./routes/project.routes"
 
 const app = express()
-const port = Number(process.env.PORT) || 4000
-const clientOrigin = process.env.CLIENT_ORIGIN ?? "http://localhost:3000"
+const port = Number(process.env.PORT) || 5000
 
-app.use(cors({ origin: clientOrigin, credentials: true }))
+app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }))
 app.use(cookieParser())
 app.use(express.json())
 
-app.get("/health", (_req: Request, res: Response) => {
-  res.json({ ok: true })
-})
+app.use("/api/v1/auth", authRouter)
+app.use("/api/v1/project", projectRouter)
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error(`[Error] ${err.message}`)

@@ -1,20 +1,13 @@
 "use client"
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type PointerEvent,
-} from "react"
+import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react"
+import { useRouter } from "next/navigation"
 import { CodeXmlIcon, EyeIcon, GlobeIcon } from "lucide-react"
-import { toast } from "sonner"
 import { ChatPanel } from "@/components/chat-panel"
 import { CodeViewer } from "@/components/code-viewer"
-import { GeneratingOverlay } from "@/components/generating-overlay"
 import { PreviewPanel } from "@/components/preview-panel"
 import { SiteHeader } from "@/components/site-header"
-import { useConversation } from "@/lib/use-conversation"
+import { useSession } from "@/lib/session"
 import { buttonVariants } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -24,8 +17,8 @@ const MAX_CHAT = 560
 const DEFAULT_CHAT = 380
 
 export function BuilderWorkspace({ projectId }: { projectId: string }) {
-  const { project, messages, send, isGenerating, isReady } =
-    useConversation(projectId)
+  const router = useRouter()
+  const { user, isLoading } = useSession()
   const [tab, setTab] = useState<(typeof TABS)[number]>("Preview")
   const [chatWidth, setChatWidth] = useState(DEFAULT_CHAT)
   const frameRef = useRef<HTMLDivElement>(null)
@@ -62,35 +55,22 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
     }
   }, [])
 
-  if (!isReady) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
-        Loading project…
-      </div>
-    )
-  }
+  useEffect(() => {
+    if (!isLoading && !user) {
+      router.push("/signin")
+    }
+  }, [isLoading, user, router])
 
-  if (!project) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
-        Project not found.
-      </div>
-    )
+  if (!user) {
+    return null
   }
 
   return (
     <div className="flex h-screen flex-col bg-background">
       <SiteHeader wide />
       <div ref={frameRef} className="flex min-h-0 flex-1 pt-14">
-        <div
-          className="h-full min-h-0 shrink-0"
-          style={{ width: chatWidth }}
-        >
-          <ChatPanel
-            messages={messages}
-            isGenerating={isGenerating}
-            onSend={send}
-          />
+        <div className="h-full min-h-0 shrink-0" style={{ width: chatWidth }}>
+          <ChatPanel />
         </div>
 
         <div
@@ -145,9 +125,6 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
             </div>
             <button
               type="button"
-              onClick={() =>
-                toast.message("Publish is next — hosting is not connected yet.")
-              }
               className={cn(buttonVariants({ size: "sm" }), "gap-1.5")}
             >
               <GlobeIcon className="size-3.5" />
@@ -155,11 +132,10 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
             </button>
           </div>
           <div className="relative min-h-0 flex-1">
-            {isGenerating ? <GeneratingOverlay /> : null}
             {tab === "Preview" ? (
-              <PreviewPanel src={project.previewUrl} />
+              <PreviewPanel src={null} />
             ) : (
-              <CodeViewer files={project.files} />
+              <CodeViewer files={{}} />
             )}
           </div>
         </section>
