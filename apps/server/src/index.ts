@@ -8,6 +8,7 @@ import cors from "cors"
 import cookieParser from "cookie-parser"
 import { authRouter } from "./routes/auth.routes"
 import { projectRouter } from "./routes/project.routes"
+import { startIdleReaper } from "./lib/idle"
 
 const app = express()
 const port = Number(process.env.PORT) || 5000
@@ -25,5 +26,6 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 })
 
 app.listen(port, () => {
+  startIdleReaper()
   console.log(`Server is running at http://localhost:${port}`)
 })

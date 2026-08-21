@@ -180,3 +180,32 @@ export async function conversation(req: Request, res: Response) {
     })
   }
 }
+
+export async function heartbeat(req: Request, res: Response) {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ error: "Unauthorized" })
+    }
+
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id
+    if (!id) {
+      return res.status(400).json({ error: "Project id is required" })
+    }
+
+    const project = await prisma.project.findUnique({ where: { id } })
+    if (!project || project.userId !== req.userId) {
+      return res.status(404).json({ error: "Project not found" })
+    }
+
+    await prisma.project.update({
+      where: { id },
+      data: { lastActiveAt: new Date() },
+    })
+
+    return res.status(200).json({ ok: true })
+  } catch {
+    return res.status(500).json({
+      error: "Internal server error",
+    })
+  }
+}
