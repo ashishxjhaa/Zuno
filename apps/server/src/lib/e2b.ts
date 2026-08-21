@@ -68,7 +68,7 @@ export async function listProjectFiles(sandboxId: string) {
 // Read one file from the project folder in the sandbox.
 export async function readProjectFile(sandboxId: string, relativePath: string) {
   const sandbox = await connectSandbox(sandboxId)
-  return sandbox.files.read(toSandboxPath(relativePath))
+  return readSandboxFile(sandbox, relativePath)
 }
 
 // Read the local Vite template into [{ path in VM, contents }].
@@ -133,10 +133,49 @@ async function waitForVite(sandbox: Sandbox) {
   throw new Error("Vite did not start")
 }
 
-// Turn a relative path into /home/user/project/... and block "..".
+// Write a file in the sandbox project (creates folders as needed).
+export async function writeProjectFile(
+  sandbox: Sandbox,
+  relativePath: string,
+  contents: string,
+) {
+  await sandbox.files.write(toSandboxPath(relativePath), contents)
+}
+
+// Overwrite an existing file. Errors if the path is missing.
+export async function updateProjectFile(
+  sandbox: Sandbox,
+  relativePath: string,
+  contents: string,
+) {
+  const target = toSandboxPath(relativePath)
+  if (!(await sandbox.files.exists(target))) {
+    throw new Error(`File not found: ${relativePath}`)
+  }
+  await sandbox.files.write(target, contents)
+}
+
+// Delete a file or folder in the sandbox project.
+export async function deleteProjectFile(
+  sandbox: Sandbox,
+  relativePath: string,
+) {
+  await sandbox.files.remove(toSandboxPath(relativePath))
+}
+
+// Read a file using an already-connected sandbox.
+export async function readSandboxFile(sandbox: Sandbox, relativePath: string) {
+  return sandbox.files.read(toSandboxPath(relativePath))
+}
+
 function toSandboxPath(relativePath: string) {
   const cleaned = relativePath.replace(/\\/g, "/").replace(/^\/+/, "")
-  if (!cleaned || cleaned.split("/").includes("..")) {
+  const parts = cleaned.split("/")
+  if (
+    !cleaned ||
+    parts.includes("..") ||
+    parts.some((part) => SKIP_DIRS.has(part))
+  ) {
     throw new Error("Invalid path")
   }
   return `${PROJECT_DIR}/${cleaned}`
