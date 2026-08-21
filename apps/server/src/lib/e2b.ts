@@ -57,6 +57,11 @@ export async function killSandbox(sandboxId: string) {
   await Sandbox.kill(sandboxId)
 }
 
+// Push the VM lifetime to E2B's max so a published preview stays up.
+export async function extendSandboxTimeout(sandboxId: string) {
+  await Sandbox.setTimeout(sandboxId, 24 * 60 * 60 * 1000)
+}
+
 // List project files as path → contents (skips node_modules, dist, etc.).
 export async function listProjectFiles(sandboxId: string) {
   const sandbox = await connectSandbox(sandboxId)

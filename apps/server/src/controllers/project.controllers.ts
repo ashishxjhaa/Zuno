@@ -1,7 +1,7 @@
 import type { Request, Response } from "express"
 import { conversationSchema, createProjectSchema } from "../lib/schema"
 import { prisma } from "../lib/prisma"
-import { createProjectSandbox, listProjectFiles } from "../lib/e2b"
+import { createProjectSandbox, extendSandboxTimeout, listProjectFiles } from "../lib/e2b"
 import { generateForProject } from "../lib/llm"
 
 export async function create(req: Request, res: Response) {
@@ -203,6 +203,45 @@ export async function heartbeat(req: Request, res: Response) {
     })
 
     return res.status(200).json({ ok: true })
+  } catch {
+    return res.status(500).json({
+      error: "Internal server error",
+    })
+  }
+}
+
+export async function publish(req: Request, res: Response) {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ error: "Unauthorized" })
+    }
+
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id
+    if (!id) {
+      return res.status(400).json({ error: "Project id is required" })
+    }
+
+    const project = await prisma.project.findUnique({ where: { id } })
+    if (!project || project.userId !== req.userId) {
+      return res.status(404).json({ error: "Project not found" })
+    }
+
+    if (!project.previewUrl || !project.sandboxId) {
+      return res.status(400).json({ error: "Project is not ready to publish" })
+    }
+
+    try {
+      await extendSandboxTimeout(project.sandboxId)
+    } catch (error) {
+      console.error(`[publish] timeout ${id}`, error)
+    }
+
+    await prisma.project.update({
+      where: { id },
+      data: { published: true, lastActiveAt: new Date() },
+    })
+
+    return res.status(200).json({ url: project.previewUrl })
   } catch {
     return res.status(500).json({
       error: "Internal server error",
