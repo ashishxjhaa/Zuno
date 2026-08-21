@@ -7,6 +7,23 @@ datasource db {
   provider = "postgresql"
 }
 
+enum ConversationType {
+  TOOL_CALL
+  TEXT_MESSAGE
+}
+
+enum MessageFrom {
+  USER
+  ASSISTANT
+}
+
+enum ToolCallKind {
+  READ_FILE
+  WRITE_FILE
+  DELETE_FILE
+  UPDATE_FILE
+}
+
 model User {
   id       String    @id @default(cuid())
   name     String
@@ -19,12 +36,30 @@ model User {
 }
 
 model Project {
-  id            String   @id @default(cuid())
-  title         String
-  initialPrompt String
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                  String                 @id @default(cuid())
+  title               String
+  initialPrompt       String
+  sandboxId           String?
+  previewUrl          String?
+  published           Boolean                @default(false)
+  isGenerating        Boolean                @default(false)
+  lastActiveAt        DateTime               @default(now())
+  userId              String
+  user                User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversationHistory ConversationHistory[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model ConversationHistory {
+  id        String            @id @default(cuid())
+  projectId String
+  project   Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type      ConversationType
+  from      MessageFrom
+  contents  String
+  hidden    Boolean           @default(false)
+  toolCall  ToolCallKind?
+  createdAt DateTime          @default(now())
 }
