@@ -1,5 +1,5 @@
 import type { Request, Response } from "express"
-import { createProjectSchema } from "../lib/schema"
+import { conversationSchema, createProjectSchema } from "../lib/schema"
 import { prisma } from "../lib/prisma"
 import { createProjectSandbox, listProjectFiles } from "../lib/e2b"
 import { generateForProject } from "../lib/llm"
@@ -117,6 +117,63 @@ export async function getById(req: Request, res: Response) {
       })),
       files,
     })
+  } catch {
+    return res.status(500).json({
+      error: "Internal server error",
+    })
+  }
+}
+
+export async function conversation(req: Request, res: Response) {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ error: "Unauthorized" })
+    }
+
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id
+    if (!id) {
+      return res.status(400).json({ error: "Project id is required" })
+    }
+
+    const parsed = conversationSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: parsed.error.issues[0]?.message || "Invalid request",
+      })
+    }
+
+    const project = await prisma.project.findUnique({ where: { id } })
+    if (!project || project.userId !== req.userId) {
+      return res.status(404).json({ error: "Project not found" })
+    }
+
+    if (!project.sandboxId) {
+      return res.status(400).json({ error: "Project is not ready" })
+    }
+
+    if (project.isGenerating) {
+      return res.status(409).json({ error: "Still generating" })
+    }
+
+    await prisma.conversationHistory.create({
+      data: {
+        projectId: id,
+        type: "TEXT_MESSAGE",
+        from: "USER",
+        contents: parsed.data.contents,
+      },
+    })
+
+    await prisma.project.update({
+      where: { id },
+      data: { isGenerating: true, lastActiveAt: new Date() },
+    })
+
+    void generateForProject(id).catch((error) => {
+      console.error(`[generate] ${id}`, error)
+    })
+
+    return res.status(200).json({ ok: true })
   } catch {
     return res.status(500).json({
       error: "Internal server error",

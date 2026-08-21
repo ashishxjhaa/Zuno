@@ -36,3 +36,11 @@ export const createProjectSchema = z.object({
     .min(3, "Describe what you want to build")
     .max(8000, "Prompt is too long"),
 })
+
+export const conversationSchema = z.object({
+  contents: z
+    .string()
+    .trim()
+    .min(1, "Message is required")
+    .max(8000, "Message is too long"),
+})
