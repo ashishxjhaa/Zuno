@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { LoaderIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -63,13 +64,16 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
   const router = useRouter()
   const { signin, signup } = useSession()
   const [values, setValues] = useState({ name: "", email: "", password: "" })
+  const [pending, setPending] = useState(false)
 
   const isSignin = mode === "signin"
   const fields = isSignin ? SIGNIN_FIELDS : SIGNUP_FIELDS
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (pending) return
 
+    setPending(true)
     try {
       if (isSignin) {
         await signin(values.email, values.password)
@@ -101,11 +105,13 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
       }
 
       toast.error("Something went wrong. Check your connection and try again.")
+    } finally {
+      setPending(false)
     }
   }
 
   return (
-    <Card className="w-full max-w-sm border-border bg-card/80 backdrop-blur-md">
+    <Card className="w-full max-w-sm border-white/10 bg-card/80 shadow-none backdrop-blur-md">
       <CardHeader>
         <CardTitle>{isSignin ? "Sign in" : "Create an account"}</CardTitle>
         <CardDescription>
@@ -125,6 +131,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
                 type={field.type}
                 placeholder={field.placeholder}
                 autoComplete={field.autoComplete}
+                disabled={pending}
                 value={values[field.name]}
                 onChange={(event) =>
                   setValues((prev) => ({
@@ -132,12 +139,22 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
                     [field.name]: event.target.value,
                   }))
                 }
+                className="border-white/15 bg-white/5 focus-visible:border-white/30 focus-visible:ring-white/15"
               />
             </div>
           ))}
 
-          <Button type="submit" className="w-full">
-            {isSignin ? "Sign in" : "Sign up"}
+          <Button type="submit" className="w-full" disabled={pending}>
+            {pending ? (
+              <>
+                <LoaderIcon className="size-4 animate-spin" />
+                {isSignin ? "Signing in…" : "Creating account…"}
+              </>
+            ) : isSignin ? (
+              "Sign in"
+            ) : (
+              "Sign up"
+            )}
           </Button>
         </form>
 
@@ -145,14 +162,14 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
           {isSignin ? (
             <>
               No account?{" "}
-              <Link href="/signup" className="text-primary hover:underline">
+              <Link href="/signup" className="text-foreground hover:underline">
                 Sign up
               </Link>
             </>
           ) : (
             <>
               Already have an account?{" "}
-              <Link href="/signin" className="text-primary hover:underline">
+              <Link href="/signin" className="text-foreground hover:underline">
                 Sign in
               </Link>
             </>
