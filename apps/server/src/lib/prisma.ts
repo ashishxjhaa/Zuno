@@ -1,23 +1,23 @@
-import { PrismaClient } from "../generated/prisma/client"
 import { PrismaPg } from "@prisma/adapter-pg"
+import { PrismaClient } from "../generated/prisma/client"
 
-function connectionString() {
+function databaseUrl() {
   const url = process.env.DATABASE_URL
   if (!url) {
     throw new Error("DATABASE_URL is not set")
   }
-  // Neon requires TLS. Don't override if the URL already sets sslmode.
-  if (url.includes("sslmode=")) {
-    return url
-  }
-  const join = url.includes("?") ? "&" : "?"
-  return `${url}${join}sslmode=require&uselibpqcompat=true`
+  // Strip sslmode from the URL so pg does not emit the deprecation warning.
+  // TLS is configured explicitly below (required for Neon).
+  const parsed = new URL(url)
+  parsed.searchParams.delete("sslmode")
+  parsed.searchParams.delete("uselibpqcompat")
+  parsed.searchParams.delete("ssl")
+  return parsed.toString()
 }
 
 const adapter = new PrismaPg({
-  connectionString: connectionString(),
+  connectionString: databaseUrl(),
+  ssl: { rejectUnauthorized: false },
 })
 
-export const prisma = new PrismaClient({
-  adapter,
-})
+export const prisma = new PrismaClient({ adapter })
