@@ -25,15 +25,22 @@ export async function createProjectSandbox() {
     const files = await collectTemplateFiles(TEMPLATE_DIR)
     await sandbox.files.write(files)
 
-    await sandbox.commands.run("npm install", {
+    const install = await sandbox.commands.run("npm install", {
       cwd: PROJECT_DIR,
       timeoutMs: 180_000,
+      onStdout: (data) => console.log(`[install] ${sandbox.sandboxId}`, data),
+      onStderr: (data) => console.error(`[install] ${sandbox.sandboxId}`, data),
     })
+    if (install.exitCode !== 0) {
+      throw new Error(`npm install failed: ${install.stderr || install.stdout}`)
+    }
 
     await sandbox.commands.run("npm run dev", {
       cwd: PROJECT_DIR,
       background: true,
       timeoutMs: 0,
+      onStdout: (data) => console.log(`[vite] ${sandbox.sandboxId}`, data),
+      onStderr: (data) => console.error(`[vite] ${sandbox.sandboxId}`, data),
     })
     await waitForVite(sandbox)
 
@@ -125,12 +132,23 @@ async function walkFiles(
 async function waitForVite(sandbox: Sandbox) {
   const probe =
     "node -e \"fetch('http://127.0.0.1:5173').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""
+  const logProbe =
+    "cat /home/user/project/node_modules/.vite/deps/_metadata.json 2>/dev/null || ls /home/user/project/"
 
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < 60; i++) {
     try {
       await sandbox.commands.run(probe, { timeoutMs: 5_000 })
       return
-    } catch {
+    } catch (error) {
+      if (i === 45 || i === 55) {
+        console.error(`[vite] ${sandbox.sandboxId} still not up, debug:`, error)
+        try {
+          const log = await sandbox.commands.run(logProbe, { timeoutMs: 5_000 })
+          console.error(`[vite] ${sandbox.sandboxId} debug output:`, log.stdout, log.stderr)
+        } catch {
+          // ignore debug probe errors
+        }
+      }
       await new Promise((resolve) => setTimeout(resolve, 1_000))
     }
   }

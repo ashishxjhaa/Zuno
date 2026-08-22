@@ -32,20 +32,17 @@ export function PromptBox() {
       const res = await frontend.post("/api/v1/project", {
         initialPrompt: value,
       })
+      sessionStorage.setItem(`zuno:prompt:${res.data.id}`, value)
       router.push(`/builder/${res.data.id}`)
-    } catch (error: any) {
-      const err = error.response.data.error
+    } catch (error: unknown) {
+      const data = (error as { response?: { data?: { error?: unknown } } })
+        .response?.data
+      const err = data?.error
       if (typeof err === "string") {
         toast.error(err)
         return
       }
-
-      for (const messages of Object.values(err.fieldErrors)) {
-        if (Array.isArray(messages) && typeof messages[0] === "string") {
-          toast.error(messages[0])
-          return
-        }
-      }
+      toast.error("Could not start the build. Is the API running?")
     } finally {
       setIsSubmitting(false)
     }

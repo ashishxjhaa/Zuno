@@ -1,8 +1,8 @@
 import type { Request, Response } from "express"
 import { conversationSchema, createProjectSchema } from "../lib/schema"
 import { prisma } from "../lib/prisma"
-import { createProjectSandbox, extendSandboxTimeout, listProjectFiles } from "../lib/e2b"
-import { generateForProject } from "../lib/llm"
+import { extendSandboxTimeout, listProjectFiles } from "../lib/e2b"
+import { generateForProject, startProjectBuild } from "../lib/llm"
 
 export async function create(req: Request, res: Response) {
   try {
@@ -29,33 +29,17 @@ export async function create(req: Request, res: Response) {
       },
     })
 
-    try {
-      const { sandboxId, previewUrl } = await createProjectSandbox()
+    await prisma.conversationHistory.create({
+      data: {
+        projectId: project.id,
+        type: "TEXT_MESSAGE",
+        from: "USER",
+        contents: initialPrompt,
+      },
+    })
 
-      await prisma.project.update({
-        where: { id: project.id },
-        data: {
-          sandboxId,
-          previewUrl,
-          lastActiveAt: new Date(),
-        },
-      })
-
-      await prisma.conversationHistory.create({
-        data: {
-          projectId: project.id,
-          type: "TEXT_MESSAGE",
-          from: "USER",
-          contents: initialPrompt,
-        },
-      })
-    } catch {
-      await prisma.project.delete({ where: { id: project.id } })
-      return res.status(500).json({ error: "Failed to start project" })
-    }
-
-    void generateForProject(project.id).catch((error) => {
-      console.error(`[generate] ${project.id}`, error)
+    void startProjectBuild(project.id).catch((error) => {
+      console.error(`[bootstrap] ${project.id}`, error)
     })
 
     return res.status(201).json({ id: project.id })

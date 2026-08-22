@@ -44,7 +44,6 @@
       "name": "web",
       "version": "0.0.1",
       "dependencies": {
-        "@workspace/shared": "workspace:*",
         "@workspace/ui": "workspace:*",
         "axios": "^1.13.2",
         "lucide-react": "^1.31.0",
@@ -81,17 +80,6 @@
         "globals": "^17.6.0",
         "typescript": "^5",
         "typescript-eslint": "^8.60.0",
-      },
-    },
-    "packages/shared": {
-      "name": "@workspace/shared",
-      "version": "0.0.0",
-      "dependencies": {
-        "zod": "^4.4.3",
-      },
-      "devDependencies": {
-        "@workspace/typescript-config": "workspace:*",
-        "typescript": "^5",
       },
     },
     "packages/typescript-config": {
@@ -632,8 +620,6 @@
     "@visx/vendor": ["@visx/vendor@4.0.0-alpha.0", "", { "dependencies": { "@types/d3-array": "3.0.3", "@types/d3-color": "3.1.0", "@types/d3-delaunay": "6.0.1", "@types/d3-format": "3.0.1", "@types/d3-geo": "3.1.0", "@types/d3-interpolate": "3.0.1", "@types/d3-path": "3.1.1", "@types/d3-scale": "4.0.2", "@types/d3-shape": "3.1.7", "@types/d3-time": "3.0.0", "@types/d3-time-format": "2.1.0", "d3-array": "3.2.1", "d3-color": "3.1.0", "d3-delaunay": "6.0.2", "d3-format": "3.1.0", "d3-geo": "3.1.0", "d3-interpolate": "3.0.1", "d3-path": "3.1.0", "d3-scale": "4.0.2", "d3-shape": "3.2.0", "d3-time": "3.1.0", "d3-time-format": "4.1.0", "internmap": "2.0.3" } }, "sha512-6I+MuqXBcv9jnlcVowHoHKSdk9gXTWkHLKyqBwRWg7LY6A3Ei8SHfubpqGV5rBUSppxMq2RszPJUS6w+H0YgmQ=="],
 
     "@workspace/eslint-config": ["@workspace/eslint-config@workspace:packages/eslint-config"],
-
-    "@workspace/shared": ["@workspace/shared@workspace:packages/shared"],
 
     "@workspace/typescript-config": ["@workspace/typescript-config@workspace:packages/typescript-config"],
 

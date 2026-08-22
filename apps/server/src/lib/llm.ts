@@ -6,6 +6,7 @@ import type { ToolCallKind } from "../generated/prisma/client"
 import { prisma } from "./prisma"
 import {
   connectSandbox,
+  createProjectSandbox,
   deleteProjectFile,
   listProjectFiles,
   readSandboxFile,
@@ -53,7 +54,8 @@ const tools: OpenAI.Chat.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "updateFile",
-      description: "Replace an existing project file. Fails if the file does not exist.",
+      description:
+        "Replace an existing project file. Fails if the file does not exist.",
       parameters: {
         type: "object",
         properties: {
@@ -78,16 +80,56 @@ const tools: OpenAI.Chat.ChatCompletionTool[] = [
   },
 ]
 
-const deepseek = new OpenAI({
-  apiKey: process.env.DEEPSEEK_API_KEY,
-  baseURL: "https://api.deepseek.com",
-})
-
 const KIND: Record<string, ToolCallKind> = {
   readFile: "READ_FILE",
   writeFile: "WRITE_FILE",
   updateFile: "UPDATE_FILE",
   deleteFile: "DELETE_FILE",
+}
+
+function getDeepseek() {
+  const apiKey = process.env.DEEPSEEK_API_KEY
+  if (!apiKey) {
+    throw new Error("DEEPSEEK_API_KEY is not set")
+  }
+  return new OpenAI({
+    apiKey,
+    baseURL: "https://api.deepseek.com",
+  })
+}
+
+// Create the E2B sandbox then run DeepSeek. Used after POST /project returns.
+export async function startProjectBuild(projectId: string) {
+  try {
+    const { sandboxId, previewUrl } = await createProjectSandbox()
+    await prisma.project.update({
+      where: { id: projectId },
+      data: { sandboxId, previewUrl, lastActiveAt: new Date() },
+    })
+    await generateForProject(projectId)
+  } catch (error) {
+    console.error(`[bootstrap] ${projectId}`, error)
+    try {
+      await prisma.conversationHistory.create({
+        data: {
+          projectId,
+          type: "TEXT_MESSAGE",
+          from: "ASSISTANT",
+          contents: "Could not start the sandbox.",
+        },
+      })
+    } catch {
+      // project may already be gone
+    }
+    try {
+      await prisma.project.update({
+        where: { id: projectId },
+        data: { isGenerating: false },
+      })
+    } catch {
+      // ignore
+    }
+  }
 }
 
 // Load project chat, run DeepSeek with file tools, save the assistant reply.
@@ -137,13 +179,14 @@ async function runGeneration(projectId: string) {
       content: `Project files:\n${Object.keys(files).sort().join("\n") || "(empty)"}`,
     },
     ...history.map((row) => ({
-      role: (row.from === "USER" ? "user" : "assistant") as "user" | "assistant",
+      role: (row.from === "USER" ? "user" : "assistant") as
+        "user" | "assistant",
       content: row.contents,
     })),
   ]
 
   for (let step = 0; step < MAX_STEPS; step++) {
-    const completion = await deepseek.chat.completions.create({
+    const completion = await getDeepseek().chat.completions.create({
       model: "deepseek-v4-flash",
       messages,
       tools,
@@ -156,7 +199,8 @@ async function runGeneration(projectId: string) {
 
     const toolCalls = choice.tool_calls ?? []
     if (toolCalls.length === 0) {
-      const text = choice.content?.trim() || "Your site is ready. Check the preview."
+      const text =
+        choice.content?.trim() || "Your site is ready. Check the preview."
       await prisma.conversationHistory.create({
         data: {
           projectId,
@@ -176,7 +220,11 @@ async function runGeneration(projectId: string) {
 
     for (const call of toolCalls) {
       if (call.type !== "function") continue
-      const result = await runTool(sandbox, call.function.name, call.function.arguments)
+      const result = await runTool(
+        sandbox,
+        call.function.name,
+        call.function.arguments
+      )
       await prisma.conversationHistory.create({
         data: {
           projectId,
@@ -204,7 +252,8 @@ async function runGeneration(projectId: string) {
       projectId,
       type: "TEXT_MESSAGE",
       from: "ASSISTANT",
-      contents: "Stopped after too many file edits. Check the preview and tell me what to change.",
+      contents:
+        "Stopped after too many file edits. Check the preview and tell me what to change.",
     },
   })
 }

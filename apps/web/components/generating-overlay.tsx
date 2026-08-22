@@ -1,4 +1,8 @@
+import { useId } from "react"
+
 export function GeneratingOverlay() {
+  const gradId = useId()
+
   return (
     <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
       <svg
@@ -6,9 +10,9 @@ export function GeneratingOverlay() {
         className="animate-zuno-pulse size-24"
         aria-hidden
       >
-        <rect width="512" height="512" rx="128" fill="url(#zuno-grad)" />
+        <rect width="512" height="512" rx="128" fill={`url(#${gradId})`} />
         <defs>
-          <radialGradient id="zuno-grad" cx="50%" cy="50%" r="100%">
+          <radialGradient id={gradId} cx="50%" cy="50%" r="100%">
             <stop stopColor="#f5af19" />
             <stop offset="1" stopColor="#f12711" />
           </radialGradient>

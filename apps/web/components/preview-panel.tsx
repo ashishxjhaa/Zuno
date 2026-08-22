@@ -10,9 +10,10 @@ export function PreviewPanel({ src }: { src: string | null }) {
   return (
     <iframe
       title="Site preview"
-      srcDoc={src}
+      src={src}
       className="h-full w-full border-0 bg-white"
-      sandbox="allow-scripts"
+      sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+      allow="clipboard-write"
     />
   )
 }

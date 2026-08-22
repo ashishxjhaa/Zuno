@@ -3,10 +3,13 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react"
 import { useRouter } from "next/navigation"
 import { CodeXmlIcon, EyeIcon, GlobeIcon } from "lucide-react"
-import { ChatPanel } from "@/components/chat-panel"
+import { toast } from "sonner"
+import { ChatPanel, type ChatMessage } from "@/components/chat-panel"
 import { CodeViewer } from "@/components/code-viewer"
+import { GeneratingOverlay } from "@/components/generating-overlay"
 import { PreviewPanel } from "@/components/preview-panel"
 import { SiteHeader } from "@/components/site-header"
+import { frontend } from "@/lib/api"
 import { useSession } from "@/lib/session"
 import { buttonVariants } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
@@ -15,14 +18,51 @@ const TABS = ["Preview", "Code"] as const
 const MIN_CHAT = 280
 const MAX_CHAT = 560
 const DEFAULT_CHAT = 380
+const POLL_MS = 2000
+const HEARTBEAT_MS = 30_000
+
+type ProjectPayload = {
+  previewUrl: string | null
+  isGenerating: boolean
+  published: boolean
+  messages: ChatMessage[]
+  files: Record<string, string>
+}
+
+function toastApiError(error: unknown) {
+  const err = (error as { response?: { data?: { error?: unknown } } }).response
+    ?.data?.error
+  if (typeof err === "string") {
+    toast.error(err)
+    return
+  }
+  toast.error("Something went wrong")
+}
 
 export function BuilderWorkspace({ projectId }: { projectId: string }) {
   const router = useRouter()
   const { user, isLoading } = useSession()
   const [tab, setTab] = useState<(typeof TABS)[number]>("Preview")
   const [chatWidth, setChatWidth] = useState(DEFAULT_CHAT)
+  const [project, setProject] = useState<ProjectPayload | null>(null)
+  const [seedPrompt, setSeedPrompt] = useState<string | null>(null)
+  const [publishing, setPublishing] = useState(false)
   const frameRef = useRef<HTMLDivElement>(null)
   const draggingRef = useRef(false)
+  const goneRef = useRef(false)
+
+  useEffect(() => {
+    try {
+      const key = `zuno:prompt:${projectId}`
+      const saved = sessionStorage.getItem(key)
+      if (saved) {
+        setSeedPrompt(saved)
+        sessionStorage.removeItem(key)
+      }
+    } catch {
+      // ignore
+    }
+  }, [projectId])
 
   const onDividerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -61,16 +101,129 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
     }
   }, [isLoading, user, router])
 
+  const loadProject = useCallback(async () => {
+    try {
+      const res = await frontend.get<ProjectPayload>(`/api/v1/project/${projectId}`)
+      setProject(res.data)
+    } catch (error: unknown) {
+      const status = (error as { response?: { status?: number } }).response
+        ?.status
+      if (status === 404) {
+        goneRef.current = true
+        toast.error("Project not found")
+        router.push("/")
+        return
+      }
+      toastApiError(error)
+    }
+  }, [projectId, router])
+
+  useEffect(() => {
+    if (!user) {
+      return
+    }
+    void loadProject()
+  }, [user, loadProject])
+
+  useEffect(() => {
+    if (!user) {
+      return
+    }
+    if (project && !project.isGenerating) {
+      return
+    }
+    const timer = window.setInterval(() => {
+      if (!goneRef.current) {
+        void loadProject()
+      }
+    }, POLL_MS)
+    return () => window.clearInterval(timer)
+  }, [user, project?.isGenerating, loadProject])
+
+  useEffect(() => {
+    if (!user) {
+      return
+    }
+    const beat = () => {
+      void frontend.post(`/api/v1/project/${projectId}/heartbeat`).catch(() => {})
+    }
+    beat()
+    const timer = window.setInterval(beat, HEARTBEAT_MS)
+    return () => window.clearInterval(timer)
+  }, [user, projectId])
+
+  const sendMessage = async (contents: string) => {
+    try {
+      await frontend.post(`/api/v1/project/${projectId}/conversation`, {
+        contents,
+      })
+      setProject((current) =>
+        current
+          ? {
+              ...current,
+              isGenerating: true,
+              messages: [
+                ...current.messages,
+                { id: `local-${Date.now()}`, from: "USER", contents },
+              ],
+            }
+          : current
+      )
+    } catch (error) {
+      toastApiError(error)
+      throw error
+    }
+  }
+
+  const onPublish = async () => {
+    if (publishing) {
+      return
+    }
+    setPublishing(true)
+    try {
+      const res = await frontend.post<{ url: string }>(
+        `/api/v1/project/${projectId}/publish`
+      )
+      const url = res.data.url
+      try {
+        await navigator.clipboard.writeText(url)
+      } catch {
+        // toast still shows the URL
+      }
+      toast.success(url)
+      setProject((current) =>
+        current ? { ...current, published: true } : current
+      )
+    } catch (error) {
+      toastApiError(error)
+    } finally {
+      setPublishing(false)
+    }
+  }
+
   if (!user) {
     return null
   }
+
+  const generating = project?.isGenerating ?? true
+  const messages =
+    project?.messages && project.messages.length > 0
+      ? project.messages
+      : seedPrompt
+        ? [{ id: "seed", from: "USER" as const, contents: seedPrompt }]
+        : []
+  const chatCooking = generating && messages.some((message) => message.from === "USER")
 
   return (
     <div className="flex h-screen flex-col bg-background">
       <SiteHeader wide />
       <div ref={frameRef} className="flex min-h-0 flex-1 pt-14">
         <div className="h-full min-h-0 shrink-0" style={{ width: chatWidth }}>
-          <ChatPanel />
+          <ChatPanel
+            messages={messages}
+            cooking={chatCooking}
+            onSend={sendMessage}
+          />
         </div>
 
         <div
@@ -125,6 +278,8 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
             </div>
             <button
               type="button"
+              disabled={publishing || !project?.previewUrl}
+              onClick={() => void onPublish()}
               className={cn(buttonVariants({ size: "sm" }), "gap-1.5")}
             >
               <GlobeIcon className="size-3.5" />
@@ -133,10 +288,11 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
           </div>
           <div className="relative min-h-0 flex-1">
             {tab === "Preview" ? (
-              <PreviewPanel src={null} />
+              <PreviewPanel src={project?.previewUrl ?? null} />
             ) : (
-              <CodeViewer files={{}} />
+              <CodeViewer files={project?.files ?? {}} />
             )}
+            {generating ? <GeneratingOverlay /> : null}
           </div>
         </section>
       </div>
