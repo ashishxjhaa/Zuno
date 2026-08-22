@@ -1,4 +1,4 @@
-# Server-only image for Railway (Express + Bun API).
+# Same server-only image when Railway Root Directory = apps/server
 FROM oven/bun:1.3
 WORKDIR /app
 

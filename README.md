@@ -37,13 +37,13 @@ Open [http://localhost:3000](http://localhost:3000). Sign up, sign in, then Buil
 
 ### API (Railway)
 
-1. New Railway project from this GitHub repo (repo root is fine).
-2. Root `railway.toml` points at `apps/server/Dockerfile` — no need to set Root Directory.
-3. Add env vars: `DATABASE_URL`, `JWT_SECRET`, `FRONTEND_URL` (your Vercel web URL), `E2B_API_KEY`, `DEEPSEEK_API_KEY`, `PORT=4000`.
-4. Run migrations once: `cd apps/server && bunx prisma migrate deploy`.
-5. Set web `NEXT_PUBLIC_API_URL` to the Railway public URL (no trailing slash).
+1. New Railway project from this GitHub repo (leave Root Directory empty / repo root).
+2. Uses the root `Dockerfile` (copies **only** `apps/server` — not the web app).
+3. Env vars: `DATABASE_URL`, `JWT_SECRET`, `FRONTEND_URL`, `E2B_API_KEY`, `DEEPSEEK_API_KEY`, `PORT=4000`.
+4. Migrate once: `cd apps/server && bunx prisma migrate deploy`.
+5. Set web `NEXT_PUBLIC_API_URL` to the Railway URL.
 
-Optional: if you prefer, set Railway **Root Directory** to `apps/server` instead; then it uses `apps/server/railway.toml` directly.
+In Railway **Settings → Build**, Dockerfile path must be `Dockerfile` (or empty). Do not set a nested path.
 
 ### Web (Vercel)
 

@@ -1,9 +1,8 @@
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "apps/server/Dockerfile"
+dockerfilePath = "Dockerfile"
 
 [deploy]
-# Image is built from apps/server context (see Dockerfile location)
 startCommand = "bun src/index.ts"
 healthcheckPath = "/"
 restartPolicyType = "ON_FAILURE"
