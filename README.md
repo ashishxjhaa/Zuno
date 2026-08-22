@@ -26,6 +26,26 @@ cd apps/web && bun run dev
 
 Open [http://localhost:3000](http://localhost:3000). Sign up, sign in, then Build. You go to `/builder/{id}` immediately; the cooking overlay stays until the sandbox and DeepSeek finish.
 
+## Deploy
+
+**Do not deploy `apps/server` on Vercel.** Vercel runs short-lived serverless functions (`/var/task/...`). This API is a long-running Bun + Express process (background E2B builds, idle reaper, `app.listen`). On Vercel you get build success then runtime `500` / `ERR_MODULE_NOT_FOUND`.
+
+| App | Host |
+| --- | --- |
+| `apps/web` (Next.js) | Vercel |
+| `apps/server` (Express) | Railway, Render, or Fly.io |
+
+### API (Railway example)
+
+1. New Railway project from this repo. Use the root `Dockerfile` (see also `apps/server/railway.toml`).
+2. Set env vars: `DATABASE_URL`, `JWT_SECRET`, `FRONTEND_URL` (your Vercel web URL), `E2B_API_KEY`, `DEEPSEEK_API_KEY`, `PORT=4000`.
+3. Run Prisma migrate against Neon/Postgres once: `cd apps/server && bunx prisma migrate deploy`.
+4. Point `apps/web` `NEXT_PUBLIC_API_URL` at the Railway public URL (no trailing slash).
+
+### Web (Vercel)
+
+Deploy `apps/web` with Root Directory `apps/web`. Set `NEXT_PUBLIC_API_URL` to the Railway API URL.
+
 ## Flow
 
 - **Build:** `POST /api/v1/project` inserts the project and returns `{ id }`. E2B + DeepSeek run in the background.
