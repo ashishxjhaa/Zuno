@@ -1,8 +1,6 @@
-# Prefer the root railway.toml when connecting the whole repo on Railway.
-# Kept here if you set the Railway service root to apps/server.
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "../../Dockerfile"
+dockerfilePath = "Dockerfile"
 
 [deploy]
 startCommand = "bun src/index.ts"

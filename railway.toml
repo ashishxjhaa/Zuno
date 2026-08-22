@@ -1,9 +1,0 @@
-[build]
-builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile"
-
-[deploy]
-# Image WORKDIR is /app/apps/server (see Dockerfile)
-startCommand = "bun src/index.ts"
-healthcheckPath = "/"
-restartPolicyType = "ON_FAILURE"

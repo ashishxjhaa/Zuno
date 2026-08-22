@@ -37,11 +37,11 @@ Open [http://localhost:3000](http://localhost:3000). Sign up, sign in, then Buil
 
 ### API (Railway)
 
-1. Create a Railway project from this GitHub repo (root directory = repo root).
-2. Railway will use the root `Dockerfile` and `railway.toml`.
+1. New Railway project from this repo.
+2. Set the service **Root Directory** to `apps/server` (so it uses `apps/server/Dockerfile` + `apps/server/railway.toml` only).
 3. Add env vars: `DATABASE_URL`, `JWT_SECRET`, `FRONTEND_URL` (your Vercel web URL), `E2B_API_KEY`, `DEEPSEEK_API_KEY`, `PORT=4000`.
-4. Run migrations once against your DB: `cd apps/server && bunx prisma migrate deploy`.
-5. Set `NEXT_PUBLIC_API_URL` on the web app to the Railway public URL (no trailing slash).
+4. Run migrations once: `cd apps/server && bunx prisma migrate deploy`.
+5. Set web `NEXT_PUBLIC_API_URL` to the Railway public URL (no trailing slash).
 
 ### Web (Vercel)
 
