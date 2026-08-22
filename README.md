@@ -35,12 +35,13 @@ Open [http://localhost:3000](http://localhost:3000). Sign up, sign in, then Buil
 | `apps/web` (Next.js) | Vercel |
 | `apps/server` (Express) | Railway, Render, or Fly.io |
 
-### API (Railway example)
+### API (Railway)
 
-1. New Railway project from this repo. Use the root `Dockerfile` (see also `apps/server/railway.toml`).
-2. Set env vars: `DATABASE_URL`, `JWT_SECRET`, `FRONTEND_URL` (your Vercel web URL), `E2B_API_KEY`, `DEEPSEEK_API_KEY`, `PORT=4000`.
-3. Run Prisma migrate against Neon/Postgres once: `cd apps/server && bunx prisma migrate deploy`.
-4. Point `apps/web` `NEXT_PUBLIC_API_URL` at the Railway public URL (no trailing slash).
+1. Create a Railway project from this GitHub repo (root directory = repo root).
+2. Railway will use the root `Dockerfile` and `railway.toml`.
+3. Add env vars: `DATABASE_URL`, `JWT_SECRET`, `FRONTEND_URL` (your Vercel web URL), `E2B_API_KEY`, `DEEPSEEK_API_KEY`, `PORT=4000`.
+4. Run migrations once against your DB: `cd apps/server && bunx prisma migrate deploy`.
+5. Set `NEXT_PUBLIC_API_URL` on the web app to the Railway public URL (no trailing slash).
 
 ### Web (Vercel)
 
