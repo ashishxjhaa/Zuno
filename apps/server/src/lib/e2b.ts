@@ -171,8 +171,10 @@ async function collectTemplateFiles(
     if (entry.isDirectory()) {
       files.push(...(await collectTemplateFiles(abs, rel)))
     } else {
+      // Templates ship as *.tpl so Vercel typecheck ignores them; restore real names in the sandbox.
+      const dest = rel.endsWith(".tpl") ? rel.slice(0, -4) : rel
       files.push({
-        path: `${PROJECT_DIR}/${rel}`,
+        path: `${PROJECT_DIR}/${dest}`,
         data: await readFile(abs, "utf8"),
       })
     }
