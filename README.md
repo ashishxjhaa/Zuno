@@ -39,11 +39,18 @@ Open [http://localhost:3000](http://localhost:3000). Sign up, sign in, then Buil
 
 1. New Railway project from this GitHub repo (leave Root Directory empty / repo root).
 2. Uses the root `Dockerfile` (copies **only** `apps/server` — not the web app).
-3. Env vars: `DATABASE_URL`, `JWT_SECRET`, `FRONTEND_URL`, `E2B_API_KEY`, `DEEPSEEK_API_KEY`, `PORT=4000`.
-4. Migrate once: `cd apps/server && bunx prisma migrate deploy`.
-5. Set web `NEXT_PUBLIC_API_URL` to the Railway URL.
+3. Env vars on Railway:
+   - `DATABASE_URL` — Neon connection string
+   - `JWT_SECRET`
+   - `FRONTEND_URL` — exact Vercel URL, e.g. `https://zuno.vercel.app` (no trailing slash)
+   - `E2B_API_KEY`, `DEEPSEEK_API_KEY`
+   - `PORT` — Railway sets this; optional to set `4000`
+   - `NODE_ENV=production`
+4. Env vars on Vercel (web):
+   - `NEXT_PUBLIC_API_URL` — Railway public URL, e.g. `https://server-xxx.up.railway.app` (no trailing slash)
+5. Migrate once: `cd apps/server && bunx prisma migrate deploy`.
 
-In Railway **Settings → Build**, Dockerfile path must be `Dockerfile` (or empty). Do not set a nested path.
+Auth cookies use `SameSite=None; Secure` in production so the Vercel site can call the Railway API with credentials.
 
 ### Web (Vercel)
 

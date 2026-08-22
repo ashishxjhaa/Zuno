@@ -12,8 +12,17 @@ import { startIdleReaper } from "./lib/idle"
 
 const app = express()
 const port = Number(process.env.PORT) || 4000
+const frontendUrl = process.env.FRONTEND_URL?.replace(/\/$/, "")
 
-app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }))
+// Railway / reverse proxies terminate TLS in front of the container.
+app.set("trust proxy", 1)
+
+app.use(
+  cors({
+    origin: frontendUrl,
+    credentials: true,
+  })
+)
 app.use(cookieParser())
 app.use(express.json())
 
@@ -29,7 +38,7 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ error: err.message })
 })
 
-app.listen(port, () => {
+app.listen(port, "0.0.0.0", () => {
   startIdleReaper()
-  console.log(`Server is running at http://localhost:${port}`)
+  console.log(`Server is running on port ${port}`)
 })
