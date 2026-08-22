@@ -17,6 +17,9 @@ import {
 import { SYSTEM_PROMPT } from "../prompts/system"
 
 const MAX_STEPS = 24
+const MAX_REPAIR_STEPS = 12
+const MAX_REPAIR_ATTEMPTS = 2
+
 const pathSchema = z.object({ path: z.string().min(1) })
 const writeSchema = z.object({
   path: z.string().min(1),
@@ -148,12 +151,13 @@ export async function generateForProject(projectId: string) {
       },
     })
   } finally {
-    // Rebuild the static site so the preview always reflects the latest files.
     try {
-      const project = await prisma.project.findUnique({ where: { id: projectId } })
+      const project = await prisma.project.findUnique({
+        where: { id: projectId },
+      })
       if (project?.sandboxId) {
         const sandbox = await connectSandbox(project.sandboxId)
-        await rebuildProject(sandbox)
+        await rebuildUntilOk(projectId, sandbox)
       }
     } catch (error) {
       console.error(`[generate] rebuild failed ${projectId}`, error)
@@ -168,6 +172,65 @@ export async function generateForProject(projectId: string) {
       console.error(`[generate] clear flag ${projectId}`, error)
     }
   }
+}
+
+// Build; if Vite fails, ask the model to fix exports/TS and retry.
+async function rebuildUntilOk(projectId: string, sandbox: Sandbox) {
+  for (let attempt = 0; attempt <= MAX_REPAIR_ATTEMPTS; attempt++) {
+    const result = await rebuildProject(sandbox)
+    if (result.ok) {
+      return
+    }
+
+    if (attempt === MAX_REPAIR_ATTEMPTS) {
+      console.error(`[build] ${projectId} still failing after repairs`)
+      await prisma.conversationHistory.create({
+        data: {
+          projectId,
+          type: "TEXT_MESSAGE",
+          from: "ASSISTANT",
+          contents:
+            "The site files were written, but the production build still has errors. Tell me what you see and I’ll fix it.",
+        },
+      })
+      return
+    }
+
+    console.log(`[build] ${projectId} repair attempt ${attempt + 1}`)
+    await repairBuild(projectId, sandbox, result.error)
+  }
+}
+
+// Short tool loop that only fixes the given Vite build error.
+async function repairBuild(
+  projectId: string,
+  sandbox: Sandbox,
+  buildError: string
+) {
+  const project = await prisma.project.findUnique({ where: { id: projectId } })
+  if (!project?.sandboxId) {
+    return
+  }
+
+  const files = await listProjectFiles(project.sandboxId)
+  const messages: ChatCompletionMessageParam[] = [
+    { role: "system", content: SYSTEM_PROMPT },
+    {
+      role: "system",
+      content: `Project files:\n${Object.keys(files).sort().join("\n") || "(empty)"}`,
+    },
+    {
+      role: "user",
+      content: `The Vite production build failed. Fix ONLY the compile/export errors so \`npx vite build\` succeeds. Use named exports consistently (export function X / import { X }). Do not redesign the site.
+
+Build error:
+${buildError.slice(0, 6000)}`,
+    },
+  ]
+
+  await runToolLoop(projectId, sandbox, messages, MAX_REPAIR_STEPS, {
+    saveAssistantText: false,
+  })
 }
 
 // Connect to the sandbox and loop until DeepSeek replies without tools.
@@ -192,12 +255,25 @@ async function runGeneration(projectId: string) {
     },
     ...history.map((row) => ({
       role: (row.from === "USER" ? "user" : "assistant") as
-        "user" | "assistant",
+        | "user"
+        | "assistant",
       content: row.contents,
     })),
   ]
 
-  for (let step = 0; step < MAX_STEPS; step++) {
+  await runToolLoop(projectId, sandbox, messages, MAX_STEPS, {
+    saveAssistantText: true,
+  })
+}
+
+async function runToolLoop(
+  projectId: string,
+  sandbox: Sandbox,
+  messages: ChatCompletionMessageParam[],
+  maxSteps: number,
+  options: { saveAssistantText: boolean }
+) {
+  for (let step = 0; step < maxSteps; step++) {
     const completion = await getDeepseek().chat.completions.create({
       model: "deepseek-v4-flash",
       messages,
@@ -211,16 +287,18 @@ async function runGeneration(projectId: string) {
 
     const toolCalls = choice.tool_calls ?? []
     if (toolCalls.length === 0) {
-      const text =
-        choice.content?.trim() || "Your site is ready. Check the preview."
-      await prisma.conversationHistory.create({
-        data: {
-          projectId,
-          type: "TEXT_MESSAGE",
-          from: "ASSISTANT",
-          contents: text,
-        },
-      })
+      if (options.saveAssistantText) {
+        const text =
+          choice.content?.trim() || "Your site is ready. Check the preview."
+        await prisma.conversationHistory.create({
+          data: {
+            projectId,
+            type: "TEXT_MESSAGE",
+            from: "ASSISTANT",
+            contents: text,
+          },
+        })
+      }
       return
     }
 
@@ -259,15 +337,17 @@ async function runGeneration(projectId: string) {
     }
   }
 
-  await prisma.conversationHistory.create({
-    data: {
-      projectId,
-      type: "TEXT_MESSAGE",
-      from: "ASSISTANT",
-      contents:
-        "Stopped after too many file edits. Check the preview and tell me what to change.",
-    },
-  })
+  if (options.saveAssistantText) {
+    await prisma.conversationHistory.create({
+      data: {
+        projectId,
+        type: "TEXT_MESSAGE",
+        from: "ASSISTANT",
+        contents:
+          "Stopped after too many file edits. Check the preview and tell me what to change.",
+      },
+    })
+  }
 }
 
 // Run one file tool on the sandbox. Returns a string for the model.

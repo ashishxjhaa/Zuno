@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { FileType, Sandbox } from "e2b"
+import { CommandExitError, FileType, Sandbox } from "e2b"
 
 const PROJECT_DIR = "/home/user/project"
 const VITE_PORT = 5173
@@ -35,7 +35,10 @@ export async function createProjectSandbox() {
       throw new Error(`npm install failed`)
     }
 
-    await buildProject(sandbox)
+    const built = await buildProject(sandbox)
+    if (!built.ok) {
+      throw new Error(`Initial template build failed: ${built.error}`)
+    }
     await startPreview(sandbox)
 
     return {
@@ -66,13 +69,21 @@ export async function extendSandboxTimeout(sandboxId: string) {
 // Build the project into /home/user/project/dist.
 async function buildProject(sandbox: Sandbox) {
   console.log(`[build] ${sandbox.sandboxId} ...`)
-  const build = await sandbox.commands.run("npx vite build", {
-    cwd: PROJECT_DIR,
-    timeoutMs: 180_000,
-  })
-  if (build.exitCode !== 0) {
-    console.error(`[build] ${sandbox.sandboxId} failed`, build.stderr || build.stdout)
-    throw new Error(`Build failed`)
+  try {
+    await sandbox.commands.run("npx vite build", {
+      cwd: PROJECT_DIR,
+      timeoutMs: 180_000,
+    })
+    return { ok: true as const }
+  } catch (error) {
+    const detail =
+      error instanceof CommandExitError
+        ? [error.stderr, error.stdout].filter(Boolean).join("\n").trim()
+        : error instanceof Error
+          ? error.message
+          : "Build failed"
+    console.error(`[build] ${sandbox.sandboxId} failed`, detail.slice(0, 2000))
+    return { ok: false as const, error: detail || "Build failed" }
   }
 }
 
@@ -89,14 +100,12 @@ async function startPreview(sandbox: Sandbox) {
 
 // Rebuild and restart preview so the latest files are served.
 export async function rebuildProject(sandbox: Sandbox) {
-  try {
-    await buildProject(sandbox)
-  } catch (error) {
-    console.error(`[build] ${sandbox.sandboxId} failed`, error)
-    // Keep the old preview running if the build fails.
-    return
+  const result = await buildProject(sandbox)
+  if (!result.ok) {
+    return result
   }
   await startPreview(sandbox)
+  return { ok: true as const }
 }
 
 async function killPortListener(sandbox: Sandbox) {
