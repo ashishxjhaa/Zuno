@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { FileType, Sandbox } from "e2b"
+
 const PROJECT_DIR = "/home/user/project"
 const VITE_PORT = 5173
 const SKIP_DIRS = new Set(["node_modules", "dist", ".git", ".vite"])
@@ -10,7 +11,7 @@ const TEMPLATE_DIR = path.join(
   "../../templates/vite-react-ts"
 )
 
-// Create a VM, copy the Vite template, install deps, start Vite, return id + preview URL.
+// Create a VM, copy the Vite template, install deps, build it, and start a static preview server.
 export async function createProjectSandbox() {
   const sandbox = await Sandbox.create({
     timeoutMs: 60 * 60 * 1000,
@@ -28,21 +29,14 @@ export async function createProjectSandbox() {
     const install = await sandbox.commands.run("npm install", {
       cwd: PROJECT_DIR,
       timeoutMs: 180_000,
-      onStdout: (data) => console.log(`[install] ${sandbox.sandboxId}`, data),
-      onStderr: (data) => console.error(`[install] ${sandbox.sandboxId}`, data),
     })
     if (install.exitCode !== 0) {
-      throw new Error(`npm install failed: ${install.stderr || install.stdout}`)
+      console.error(`[install] ${sandbox.sandboxId} failed`, install.stderr || install.stdout)
+      throw new Error(`npm install failed`)
     }
 
-    await sandbox.commands.run("npm run dev", {
-      cwd: PROJECT_DIR,
-      background: true,
-      timeoutMs: 0,
-      onStdout: (data) => console.log(`[vite] ${sandbox.sandboxId}`, data),
-      onStderr: (data) => console.error(`[vite] ${sandbox.sandboxId}`, data),
-    })
-    await waitForVite(sandbox)
+    await buildProject(sandbox)
+    await startPreview(sandbox)
 
     return {
       sandboxId: sandbox.sandboxId,
@@ -67,6 +61,85 @@ export async function killSandbox(sandboxId: string) {
 // Push the VM lifetime to E2B's max so a published preview stays up.
 export async function extendSandboxTimeout(sandboxId: string) {
   await Sandbox.setTimeout(sandboxId, 24 * 60 * 60 * 1000)
+}
+
+// Build the project into /home/user/project/dist.
+async function buildProject(sandbox: Sandbox) {
+  console.log(`[build] ${sandbox.sandboxId} ...`)
+  const build = await sandbox.commands.run("npx vite build", {
+    cwd: PROJECT_DIR,
+    timeoutMs: 180_000,
+  })
+  if (build.exitCode !== 0) {
+    console.error(`[build] ${sandbox.sandboxId} failed`, build.stderr || build.stdout)
+    throw new Error(`Build failed`)
+  }
+}
+
+// Kill any process on the preview port and serve the built dist folder.
+async function startPreview(sandbox: Sandbox) {
+  await killPortListener(sandbox)
+  await sandbox.commands.run("npm run preview", {
+    cwd: PROJECT_DIR,
+    background: true,
+    timeoutMs: 0,
+  })
+  await waitForServer(sandbox)
+}
+
+// Rebuild and restart preview so the latest files are served.
+export async function rebuildProject(sandbox: Sandbox) {
+  try {
+    await buildProject(sandbox)
+  } catch (error) {
+    console.error(`[build] ${sandbox.sandboxId} failed`, error)
+    // Keep the old preview running if the build fails.
+    return
+  }
+  await startPreview(sandbox)
+}
+
+async function killPortListener(sandbox: Sandbox) {
+  const killCommands = [
+    "pkill -f 'vite' || true",
+    "fuser -k 5173/tcp 2>/dev/null || true",
+    "kill -9 $(lsof -ti:5173) 2>/dev/null || true",
+  ]
+  for (const cmd of killCommands) {
+    try {
+      await sandbox.commands.run(cmd, { timeoutMs: 5_000 })
+    } catch {
+      // ignore
+    }
+  }
+}
+
+// Poll until the server answers on port 5173.
+async function waitForServer(sandbox: Sandbox) {
+  const probe =
+    "node -e \"fetch('http://127.0.0.1:5173').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""
+  const logProbe =
+    "cat /home/user/project/dist/index.html 2>/dev/null || ls /home/user/project/"
+
+  for (let i = 0; i < 60; i++) {
+    try {
+      await sandbox.commands.run(probe, { timeoutMs: 5_000 })
+      return
+    } catch (error) {
+      if (i === 45 || i === 55) {
+        console.error(`[preview] ${sandbox.sandboxId} still not up, debug:`, error)
+        try {
+          const log = await sandbox.commands.run(logProbe, { timeoutMs: 5_000 })
+          console.error(`[preview] ${sandbox.sandboxId} debug output:`, log.stdout, log.stderr)
+        } catch {
+          // ignore debug probe errors
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1_000))
+    }
+  }
+
+  throw new Error("Preview server did not start")
 }
 
 // List project files as path → contents (skips node_modules, dist, etc.).
@@ -126,34 +199,6 @@ async function walkFiles(
       out[childRel] = await sandbox.files.read(childAbs)
     }
   }
-}
-
-// Poll until Vite answers on port 5173.
-async function waitForVite(sandbox: Sandbox) {
-  const probe =
-    "node -e \"fetch('http://127.0.0.1:5173').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""
-  const logProbe =
-    "cat /home/user/project/node_modules/.vite/deps/_metadata.json 2>/dev/null || ls /home/user/project/"
-
-  for (let i = 0; i < 60; i++) {
-    try {
-      await sandbox.commands.run(probe, { timeoutMs: 5_000 })
-      return
-    } catch (error) {
-      if (i === 45 || i === 55) {
-        console.error(`[vite] ${sandbox.sandboxId} still not up, debug:`, error)
-        try {
-          const log = await sandbox.commands.run(logProbe, { timeoutMs: 5_000 })
-          console.error(`[vite] ${sandbox.sandboxId} debug output:`, log.stdout, log.stderr)
-        } catch {
-          // ignore debug probe errors
-        }
-      }
-      await new Promise((resolve) => setTimeout(resolve, 1_000))
-    }
-  }
-
-  throw new Error("Vite did not start")
 }
 
 // Write a file in the sandbox project (creates folders as needed).

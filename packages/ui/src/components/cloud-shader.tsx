@@ -191,7 +191,7 @@ function parseHex(color: string): [number, number, number] {
   const value = color.trim();
   if (value.startsWith("#")) {
     const hex = value.slice(1);
-    if (hex.length === 3) {
+    if (hex.length === 3 && hex[0] && hex[1] && hex[2]) {
       return [
         parseInt(hex[0] + hex[0], 16) / 255,
         parseInt(hex[1] + hex[1], 16) / 255,

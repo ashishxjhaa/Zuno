@@ -4,7 +4,7 @@ export function GeneratingOverlay() {
   const gradId = useId()
 
   return (
-    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
+    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black">
       <svg
         viewBox="0 0 512 512"
         className="animate-zuno-pulse size-24"
@@ -35,7 +35,7 @@ export function GeneratingOverlay() {
           />
         </g>
       </svg>
-      <p className="mt-4 text-sm text-muted-foreground">Cooking…</p>
+      <p className="mt-4 text-sm text-white/80">Cooking…</p>
     </div>
   )
 }

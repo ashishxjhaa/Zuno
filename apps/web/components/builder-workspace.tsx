@@ -47,6 +47,7 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
   const [project, setProject] = useState<ProjectPayload | null>(null)
   const [seedPrompt, setSeedPrompt] = useState<string | null>(null)
   const [publishing, setPublishing] = useState(false)
+  const [previewRevision, setPreviewRevision] = useState(0)
   const frameRef = useRef<HTMLDivElement>(null)
   const draggingRef = useRef(false)
   const goneRef = useRef(false)
@@ -72,7 +73,7 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
   }, [])
 
   useEffect(() => {
-    const onMove = (event: PointerEvent) => {
+    const onMove = (event: globalThis.PointerEvent) => {
       if (!draggingRef.current || !frameRef.current) {
         return
       }
@@ -140,6 +141,13 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
     return () => window.clearInterval(timer)
   }, [user, project?.isGenerating, loadProject])
 
+  // Bump preview revision when a generation finishes so the iframe reloads fresh.
+  useEffect(() => {
+    if (project && !project.isGenerating && project.previewUrl) {
+      setPreviewRevision((rev) => rev + 1)
+    }
+  }, [project?.isGenerating, project?.previewUrl])
+
   useEffect(() => {
     if (!user) {
       return
@@ -191,6 +199,7 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
         // toast still shows the URL
       }
       toast.success(url)
+      window.open(url, "_blank", "noopener,noreferrer")
       setProject((current) =>
         current ? { ...current, published: true } : current
       )
@@ -251,7 +260,7 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
           </svg>
         </div>
 
-        <section className="relative flex min-w-0 flex-1 flex-col">
+        <section className="relative flex min-w-0 flex-1 flex-col bg-[#0a0a09]">
           <div className="flex items-center justify-between border-b border-border px-3 py-2">
             <div className="flex gap-1.5">
               {TABS.map((item) => {
@@ -287,11 +296,14 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
             </button>
           </div>
           <div className="relative min-h-0 flex-1">
-            {tab === "Preview" ? (
-              <PreviewPanel src={project?.previewUrl ?? null} />
-            ) : (
+            <div className={cn("absolute inset-0", tab !== "Preview" && "hidden")}>
+              <PreviewPanel
+                src={project?.previewUrl ? `${project.previewUrl}?v=${previewRevision}` : null}
+              />
+            </div>
+            <div className={cn("absolute inset-0", tab !== "Code" && "hidden")}>
               <CodeViewer files={project?.files ?? {}} />
-            )}
+            </div>
             {generating ? <GeneratingOverlay /> : null}
           </div>
         </section>

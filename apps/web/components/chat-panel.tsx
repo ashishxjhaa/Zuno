@@ -22,13 +22,22 @@ export function ChatPanel({
 }) {
   const [value, setValue] = useState("")
   const bottomRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" })
   }, [messages, cooking])
 
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
+  // Auto-grow textarea height up to a max.
+  useEffect(() => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+    textarea.style.height = "auto"
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 128)}px`
+  }, [value])
+
+  const submit = async (event?: FormEvent<HTMLFormElement>) => {
+    event?.preventDefault()
     const contents = value.trim()
     if (!contents || cooking) {
       return
@@ -36,6 +45,9 @@ export function ChatPanel({
     try {
       await onSend(contents)
       setValue("")
+      if (textareaRef.current) {
+        textareaRef.current.style.height = "auto"
+      }
     } catch {
       // parent already toasted
     }
@@ -68,7 +80,7 @@ export function ChatPanel({
             )
           )}
 
-          {cooking ? (
+          {cooking && messages[messages.length - 1]?.from !== "ASSISTANT" ? (
             <div className="flex items-center gap-2.5 text-[13px] text-muted-foreground">
               <Image
                 src="/zuno.svg"
@@ -85,20 +97,21 @@ export function ChatPanel({
       </div>
 
       <form onSubmit={(event) => void submit(event)} className="p-3">
-        <div className="flex min-h-11 items-center gap-2 rounded-xl border border-dashed border-[#ff5800] bg-[#1c1c1a] px-2.5 transition-colors focus-within:bg-[#ff5800]/10">
+        <div className="flex items-end gap-2 rounded-xl border border-dashed border-[var(--show-color)] bg-[#1c1c1a] px-2.5 py-2 transition-colors duration-150 [--show-color:#ff5800]">
           <textarea
+            ref={textareaRef}
             value={value}
             onChange={(event) => setValue(event.target.value)}
             placeholder="Ask Zuno to change the site…"
             rows={1}
-            className="no-scrollbar max-h-32 min-h-8 flex-1 resize-none bg-transparent py-2 text-[13px] leading-5 text-foreground outline-none placeholder:text-muted-foreground"
+            className="no-scrollbar min-h-8 flex-1 resize-none bg-transparent py-2 text-[13px] leading-5 text-foreground outline-none placeholder:text-muted-foreground"
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault()
                 if (cooking) {
                   return
                 }
-                event.currentTarget.form?.requestSubmit()
+                submit()
               }
             }}
           />

@@ -10,6 +10,7 @@ import {
   deleteProjectFile,
   listProjectFiles,
   readSandboxFile,
+  rebuildProject,
   updateProjectFile,
   writeProjectFile,
 } from "./e2b"
@@ -147,6 +148,17 @@ export async function generateForProject(projectId: string) {
       },
     })
   } finally {
+    // Rebuild the static site so the preview always reflects the latest files.
+    try {
+      const project = await prisma.project.findUnique({ where: { id: projectId } })
+      if (project?.sandboxId) {
+        const sandbox = await connectSandbox(project.sandboxId)
+        await rebuildProject(sandbox)
+      }
+    } catch (error) {
+      console.error(`[generate] rebuild failed ${projectId}`, error)
+    }
+
     try {
       await prisma.project.update({
         where: { id: projectId },
