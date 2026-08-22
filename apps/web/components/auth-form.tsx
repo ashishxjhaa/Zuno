@@ -78,19 +78,29 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
         await signup(values.name, values.email, values.password)
         router.push("/signin")
       }
-    } catch (error: any) {
-      const err = error.response.data.error
+    } catch (error: unknown) {
+      const data = (error as { response?: { data?: { error?: unknown } } })
+        ?.response?.data
+      const err = data?.error
+
       if (typeof err === "string") {
         toast.error(err)
         return
       }
 
-      for (const messages of Object.values(err.fieldErrors)) {
-        if (Array.isArray(messages) && typeof messages[0] === "string") {
-          toast.error(messages[0])
-          return
+      if (err && typeof err === "object" && "fieldErrors" in err) {
+        const fieldErrors = (
+          err as { fieldErrors?: Record<string, string[] | undefined> }
+        ).fieldErrors
+        for (const messages of Object.values(fieldErrors ?? {})) {
+          if (Array.isArray(messages) && typeof messages[0] === "string") {
+            toast.error(messages[0])
+            return
+          }
         }
       }
+
+      toast.error("Something went wrong. Check your connection and try again.")
     }
   }
 

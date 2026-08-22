@@ -47,10 +47,11 @@ Open [http://localhost:3000](http://localhost:3000). Sign up, sign in, then Buil
    - `PORT` — Railway sets this; optional to set `4000`
    - `NODE_ENV=production`
 4. Env vars on Vercel (web):
-   - `NEXT_PUBLIC_API_URL` — Railway public URL, e.g. `https://server-xxx.up.railway.app` (no trailing slash)
+   - `NEXT_PUBLIC_API_URL` — Railway origin only, e.g. `https://server-xxx.up.railway.app`
+     (**do not** append `/api/v1` — paths already include it)
 5. Migrate once: `cd apps/server && bunx prisma migrate deploy`.
 
-Auth cookies use `SameSite=None; Secure` in production so the Vercel site can call the Railway API with credentials.
+Auth cookies use `SameSite=None; Secure` in production so the Vercel site can call the Railway API with credentials. After changing `NEXT_PUBLIC_API_URL`, **redeploy the web app** (it is inlined at build time).
 
 ### Web (Vercel)
 
