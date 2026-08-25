@@ -29,7 +29,7 @@ const FEATURES = [
   },
   {
     title: "Chat to change it",
-    body: "You can view the code. Updates happen through chat — not by editing files yourself.",
+    body: "You can view the code. Updates happen through chat, not by editing files yourself.",
     containerClassName: "col-span-1 lg:col-span-3 bg-[#262624]",
     bodyClassName: "text-neutral-200",
   },

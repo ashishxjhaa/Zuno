@@ -6,7 +6,7 @@
 
 **Prompt. Preview. Ship.**
 
-A chat-only AI website builder. Describe a site, get a live Vite + React + TypeScript preview in a sandbox, then iterate in chat — not by editing files yourself.
+A chat-only AI website builder. Describe a site, get a live Vite + React + TypeScript preview in a sandbox, then iterate in chat, not by editing files yourself.
 
 [![Live Demo](https://shieldcn.dev/badge/demo-live-FF8162.svg?logo=vercel)](https://zuno-web.vercel.app)
 [![GitHub stars](https://shieldcn.dev/github/stars/ashishxjhaa/Zuno.svg?variant=outline)](https://github.com/ashishxjhaa/Zuno/stargazers)
@@ -42,12 +42,12 @@ A chat-only AI website builder. Describe a site, get a live Vite + React + TypeS
 
 ## Features
 
-- **Prompt to live site** — one sentence is enough. DeepSeek builds a complete Vite + React + TypeScript + Tailwind page
-- **Live sandbox preview** — the builder iframe is the real E2B Vite URL. You watch the site come together
-- **Chat-only edits** — view the code, change the site by talking. The model uses `readFile`, `writeFile`, `updateFile`, and `deleteFile`
-- **Publish** — keep a preview online. Unpublished projects go idle after 30 minutes and are deleted
-- **Authentication** — signup, signin, JWT in httpOnly cookies with bcrypt-hashed passwords
-- **Dark product UI** — cloud-shader landing, orange accent (`#ff5800`), and a builder with preview, code, and chat
+- **Prompt to live site**: one sentence is enough. DeepSeek builds a complete Vite + React + TypeScript + Tailwind page
+- **Live sandbox preview**: the builder iframe is the real E2B Vite URL. You watch the site come together
+- **Chat-only edits**: view the code, change the site by talking. The model uses `readFile`, `writeFile`, `updateFile`, and `deleteFile`
+- **Publish**: keep a preview online. Unpublished projects go idle after 30 minutes and are deleted
+- **Authentication**: signup, signin, JWT in httpOnly cookies with bcrypt-hashed passwords
+- **Dark product UI**: cloud-shader landing, orange accent (`#ff5800`), and a builder with preview, code, and chat
 
 ## Tech Stack
 
@@ -104,7 +104,7 @@ cd apps/web && bun run dev
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-> **Note:** `npm`, `yarn`, and `pnpm` also work — replace `bun` / `bunx` with your package manager of choice.
+> **Note:** `npm`, `yarn`, and `pnpm` also work. Replace `bun` / `bunx` with your package manager of choice.
 
 ## Environment Variables
 
@@ -114,7 +114,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 |----------|----------|-------------|
 | `DATABASE_URL` | Yes | PostgreSQL connection string (Neon recommended) |
 | `JWT_SECRET` | Yes | Secret for signing and verifying JWT tokens |
-| `FRONTEND_URL` | Yes | Web origin — `http://localhost:3000` locally |
+| `FRONTEND_URL` | Yes | Web origin, e.g. `http://localhost:3000` locally |
 | `E2B_API_KEY` | Yes | E2B sandbox API key |
 | `DEEPSEEK_API_KEY` | Yes | DeepSeek API key (`https://api.deepseek.com`) |
 | `PORT` | No | API port (default `4000`) |
@@ -123,7 +123,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `NEXT_PUBLIC_API_URL` | Yes | API origin — `http://localhost:4000` locally. Do not append `/api/v1` |
+| `NEXT_PUBLIC_API_URL` | Yes | API origin, e.g. `http://localhost:4000` locally. Do not append `/api/v1` |
 
 ## Scripts
 
@@ -167,13 +167,13 @@ Auth is under `/api/v1/auth`. Projects are under `/api/v1/project`. All project 
 |--------|------|------|
 | `POST` | `/api/v1/auth/signup` | `{ name, email, password }` |
 | `POST` | `/api/v1/auth/signin` | `{ email, password }` |
-| `POST` | `/api/v1/auth/signout` | — |
-| `GET` | `/api/v1/auth/me` | — |
+| `POST` | `/api/v1/auth/signout` | (none) |
+| `GET` | `/api/v1/auth/me` | (none) |
 | `POST` | `/api/v1/project` | `{ initialPrompt }` |
-| `GET` | `/api/v1/project/:id` | — |
+| `GET` | `/api/v1/project/:id` | (none) |
 | `POST` | `/api/v1/project/:id/conversation` | `{ contents }` |
-| `POST` | `/api/v1/project/:id/heartbeat` | — |
-| `POST` | `/api/v1/project/:id/publish` | — |
+| `POST` | `/api/v1/project/:id/heartbeat` | (none) |
+| `POST` | `/api/v1/project/:id/publish` | (none) |
 
 `POST /api/v1/project` returns `{ id }` as soon as the row is inserted. Generation is not awaited. You land on `/builder/{id}` immediately; the overlay stays until the sandbox and DeepSeek finish.
 
@@ -189,10 +189,10 @@ flowchart LR
     e2b -->|preview URL| web
 ```
 
-1. **Build** — `POST /api/v1/project` creates the project. Sandbox + DeepSeek run in the background.
-2. **Builder** — polls project state, iframes the E2B preview, and sends chat to `/conversation`.
-3. **Idle** — the open tab sends a heartbeat. After 30 minutes with no heartbeat, unpublished projects are killed and deleted.
-4. **Publish** — `POST /api/v1/project/:id/publish` returns `{ url }`. Published projects are not idle-deleted.
+1. **Build**: `POST /api/v1/project` creates the project. Sandbox + DeepSeek run in the background.
+2. **Builder**: polls project state, iframes the E2B preview, and sends chat to `/conversation`.
+3. **Idle**: the open tab sends a heartbeat. After 30 minutes with no heartbeat, unpublished projects are killed and deleted.
+4. **Publish**: `POST /api/v1/project/:id/publish` returns `{ url }`. Published projects are not idle-deleted.
 
 Project files live in the sandbox. Postgres stores users, project metadata, and chat. There is no S3.
 
@@ -210,7 +210,7 @@ Project files live in the sandbox. Postgres stores users, project metadata, and 
 1. New Railway project from this GitHub repo (leave Root Directory empty / repo root).
 2. Uses the root `Dockerfile` (copies **only** `apps/server`).
 3. Set `DATABASE_URL`, `JWT_SECRET`, `FRONTEND_URL` (exact Vercel URL, no trailing slash), `E2B_API_KEY`, `DEEPSEEK_API_KEY`, and `NODE_ENV=production`.
-4. Set `NEXT_PUBLIC_API_URL` on Vercel to the Railway origin only — do not append `/api/v1`.
+4. Set `NEXT_PUBLIC_API_URL` on Vercel to the Railway origin only. Do not append `/api/v1`.
 5. Migrate once: `cd apps/server && bunx prisma migrate deploy`.
 
 Auth cookies use `SameSite=None; Secure` in production so the Vercel site can call the Railway API with credentials. After changing `NEXT_PUBLIC_API_URL`, **redeploy the web app** (it is inlined at build time).
@@ -221,6 +221,6 @@ Deploy `apps/web` with Root Directory `apps/web`. Set `NEXT_PUBLIC_API_URL` to t
 
 ## Author
 
-**Ashish** — [GitHub](https://github.com/ashishxjhaa)
+**Ashish** · [GitHub](https://github.com/ashishxjhaa)
 
 ---

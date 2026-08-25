@@ -25,7 +25,7 @@ export function SiteFooter() {
     <footer className="py-8">
       <div className="flex flex-col items-center justify-between gap-6 sm:flex-row">
         <p className="text-sm text-muted-foreground">
-          {year} Zuno — All rights reserved.
+          {year} Zuno. All rights reserved.
         </p>
         <div className="flex items-center gap-10">
           {FOOTER_LINKS.map((link) => (

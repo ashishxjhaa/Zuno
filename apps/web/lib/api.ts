@@ -5,7 +5,7 @@ function apiBaseUrl() {
   return raw
     .trim()
     .replace(/\/$/, "")
-    // People often paste ".../api/v1" — paths already include /api/v1.
+    // People often paste ".../api/v1". Paths already include /api/v1.
     .replace(/\/api\/v1$/i, "")
 }
 
