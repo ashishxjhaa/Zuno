@@ -46,7 +46,7 @@ export function LandingPage() {
             text="Build a website from a prompt"
             images={BADGE_IMAGES}
           />
-          <h1 className="mt-20 text-2xl font-medium tracking-tight text-white md:text-3xl">
+          <h1 className="mt-16 bg-black/70 px-4 py-2 text-2xl font-medium tracking-tight text-white shadow-[3px_3px_0_0_rgba(0,0,0,0.5)] md:mt-20 md:text-3xl">
             Prompt. Preview. Ship.
           </h1>
           <div className="mt-8 flex w-full justify-center">

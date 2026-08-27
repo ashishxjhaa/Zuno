@@ -1,8 +1,14 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { CodeXmlIcon, EyeIcon, GlobeIcon } from "lucide-react"
+import {
+  CodeXmlIcon,
+  EyeIcon,
+  GlobeIcon,
+  PanelLeftCloseIcon,
+  PanelLeftOpenIcon,
+} from "lucide-react"
 import { toast } from "sonner"
 import { ChatPanel, type ChatMessage } from "@/components/chat-panel"
 import { CodeViewer } from "@/components/code-viewer"
@@ -15,9 +21,7 @@ import { buttonVariants } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
 
 const TABS = ["Preview", "Code"] as const
-const MIN_CHAT = 280
-const MAX_CHAT = 560
-const DEFAULT_CHAT = 380
+const CHAT_WIDTH = 380
 const POLL_MS = 2000
 const HEARTBEAT_MS = 30_000
 
@@ -43,13 +47,11 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
   const router = useRouter()
   const { user, isLoading } = useSession()
   const [tab, setTab] = useState<(typeof TABS)[number]>("Preview")
-  const [chatWidth, setChatWidth] = useState(DEFAULT_CHAT)
+  const [chatOpen, setChatOpen] = useState(true)
   const [project, setProject] = useState<ProjectPayload | null>(null)
   const [seedPrompt, setSeedPrompt] = useState<string | null>(null)
   const [publishing, setPublishing] = useState(false)
   const [previewRevision, setPreviewRevision] = useState(0)
-  const frameRef = useRef<HTMLDivElement>(null)
-  const draggingRef = useRef(false)
   const goneRef = useRef(false)
 
   useEffect(() => {
@@ -64,37 +66,6 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
       // ignore
     }
   }, [projectId])
-
-  const onDividerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    event.preventDefault()
-    draggingRef.current = true
-    document.body.style.cursor = "col-resize"
-    document.body.style.userSelect = "none"
-  }, [])
-
-  useEffect(() => {
-    const onMove = (event: globalThis.PointerEvent) => {
-      if (!draggingRef.current || !frameRef.current) {
-        return
-      }
-      const left = frameRef.current.getBoundingClientRect().left
-      const next = Math.min(MAX_CHAT, Math.max(MIN_CHAT, event.clientX - left))
-      setChatWidth(next)
-    }
-
-    const onUp = () => {
-      draggingRef.current = false
-      document.body.style.cursor = ""
-      document.body.style.userSelect = ""
-    }
-
-    window.addEventListener("pointermove", onMove)
-    window.addEventListener("pointerup", onUp)
-    return () => {
-      window.removeEventListener("pointermove", onMove)
-      window.removeEventListener("pointerup", onUp)
-    }
-  }, [])
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -226,22 +197,18 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
   return (
     <div className="flex h-screen flex-col bg-background">
       <SiteHeader wide />
-      <div ref={frameRef} className="flex min-h-0 flex-1 pt-14">
-        <div className="h-full min-h-0 shrink-0" style={{ width: chatWidth }}>
-          <ChatPanel
-            messages={messages}
-            cooking={chatCooking}
-            onSend={sendMessage}
-          />
-        </div>
+      <div className="flex min-h-0 flex-1 pt-14">
+        {chatOpen ? (
+          <div className="h-full min-h-0 shrink-0" style={{ width: CHAT_WIDTH }}>
+            <ChatPanel
+              messages={messages}
+              cooking={chatCooking}
+              onSend={sendMessage}
+            />
+          </div>
+        ) : null}
 
-        <div
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Resize chat and preview"
-          onPointerDown={onDividerDown}
-          className="relative z-10 w-4 shrink-0 cursor-col-resize touch-none"
-        >
+        <div className="relative z-10 flex w-8 shrink-0 items-center justify-center">
           <svg
             aria-hidden
             className="pointer-events-none absolute inset-y-0 left-1/2 h-full w-[2px] -translate-x-1/2"
@@ -258,6 +225,19 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
               strokeLinecap="round"
             />
           </svg>
+          <button
+            type="button"
+            onClick={() => setChatOpen((open) => !open)}
+            aria-label={chatOpen ? "Hide chat" : "Show chat"}
+            aria-pressed={chatOpen}
+            className="relative z-10 flex size-7 items-center justify-center rounded-md border border-[#f5af19]/40 bg-[#0a0a09] text-[#f5af19] transition-colors hover:bg-[#f5af19]/15"
+          >
+            {chatOpen ? (
+              <PanelLeftCloseIcon className="size-3.5" />
+            ) : (
+              <PanelLeftOpenIcon className="size-3.5" />
+            )}
+          </button>
         </div>
 
         <section className="relative flex min-w-0 flex-1 flex-col bg-[#0a0a09]">
