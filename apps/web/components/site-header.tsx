@@ -42,7 +42,7 @@ function PillNav({
         onClick={onSignout}
         className={cn(
           navBtn,
-          "gap-1.5",
+          "cursor-pointer gap-1.5",
           solid
             ? "bg-zinc-900 text-white hover:bg-zinc-800"
             : "bg-white/90 text-[#e04e00] hover:bg-white"
@@ -148,7 +148,7 @@ export function SiteHeader({
       <button
         type="button"
         onClick={() => void signout()}
-        className={cn(navBtn, "gap-1.5 bg-zinc-900 text-white hover:bg-zinc-800")}
+        className={cn(navBtn, "cursor-pointer gap-1.5 bg-zinc-900 text-white hover:bg-zinc-800")}
       >
         <LogOutIcon className="size-3.5" />
         Sign out
