@@ -1,0 +1,12 @@
+export const SITE_NAME = "Zuno"
+export const SITE_TAGLINE = "AI website builder"
+export const SITE_DESCRIPTION =
+  "Zuno is a full-stack AI website builder that turns a prompt into a live Vite + React + TypeScript site you can iterate on through chat."
+export const SITE_URL = "https://zuno.ashishjha.xyz"
+export const GITHUB_URL = "https://github.com/ashishxjhaa/Zuno"
+export const GITHUB_PROFILE_URL = "https://github.com/ashishxjhaa"
+export const GITHUB_ISSUES_URL = "https://github.com/ashishxjhaa/Zuno/issues"
+export const TWITTER_URL = "https://x.com/ashishxjhaa"
+export const CONTACT_EMAIL = "ashishxyzjha@gmail.com"
+export const AUTHOR_NAME = "Ashish Jha"
+export const AUTHOR_URL = "https://ashishjha.xyz/"

@@ -54,13 +54,13 @@ export function ChatPanel({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[#161614]">
+    <div className="flex h-full min-h-0 flex-col border-r border-border bg-background">
       <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-5">
         <div className="flex flex-col gap-6">
           {messages.map((message) =>
             message.from === "USER" ? (
               <div key={message.id} className="flex justify-end">
-                <p className="max-w-[85%] rounded-xl bg-[#2c2c29] px-3.5 py-2.5 text-[13px] leading-relaxed text-[#f4f3ee]">
+                <p className="max-w-[85%] rounded-xl bg-zinc-900 px-3.5 py-2.5 text-[13px] leading-relaxed text-white">
                   {message.contents}
                 </p>
               </div>
@@ -73,7 +73,7 @@ export function ChatPanel({
                   height={22}
                   className="mt-0.5 size-[22px] shrink-0 rounded-md"
                 />
-                <p className="max-w-[90%] rounded-xl bg-[#21211f] px-3.5 py-2.5 text-[13px] leading-relaxed text-[#c4c2ba]">
+                <p className="max-w-[90%] rounded-xl border border-border bg-muted px-3.5 py-2.5 text-[13px] leading-relaxed text-foreground">
                   {message.contents}
                 </p>
               </div>
@@ -89,7 +89,7 @@ export function ChatPanel({
                 height={22}
                 className="size-[22px] shrink-0 rounded-md"
               />
-              <span>Cooking…</span>
+              <span>Cooking...</span>
             </div>
           ) : null}
           <div ref={bottomRef} />
@@ -97,12 +97,12 @@ export function ChatPanel({
       </div>
 
       <form onSubmit={(event) => void submit(event)} className="p-3">
-        <div className="flex items-end gap-2 rounded-xl border border-dashed border-[var(--show-color)] bg-[#1c1c1a] px-2.5 py-2 transition-colors duration-150 [--show-color:#ff5800]">
+        <div className="flex items-end gap-2 rounded-xl border border-dashed border-[var(--show-color)] bg-zinc-50 px-2.5 py-2 transition-colors duration-150 [--show-color:#ff5800]">
           <textarea
             ref={textareaRef}
             value={value}
             onChange={(event) => setValue(event.target.value)}
-            placeholder="Ask Zuno to change the site…"
+            placeholder="Ask Zuno to change the site..."
             rows={1}
             className="no-scrollbar min-h-8 flex-1 resize-none bg-transparent py-2 text-[13px] leading-5 text-foreground outline-none placeholder:text-muted-foreground"
             onKeyDown={(event) => {

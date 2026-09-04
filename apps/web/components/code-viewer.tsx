@@ -13,7 +13,7 @@ import {
   FolderOpenIcon,
 } from "lucide-react"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
-import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism"
+import { oneLight } from "react-syntax-highlighter/dist/cjs/styles/prism"
 import { toast } from "sonner"
 import { Button } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
@@ -43,7 +43,7 @@ export function CodeViewer({ files }: { files: Record<string, string> }) {
 
   return (
     <div className="flex h-full min-h-0">
-      <aside className="no-scrollbar flex w-56 shrink-0 flex-col overflow-y-auto border-r border-border bg-[#161614]">
+      <aside className="no-scrollbar flex w-56 shrink-0 flex-col overflow-y-auto border-r border-border bg-zinc-50">
         <div className="flex items-center justify-between border-b border-border px-3 py-2">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             Explorer
@@ -66,8 +66,8 @@ export function CodeViewer({ files }: { files: Record<string, string> }) {
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col bg-[#0d0d0c]">
-        <div className="flex items-center justify-between border-b border-border bg-[#161614] px-3 py-2 shadow-sm">
+      <div className="flex min-w-0 flex-1 flex-col bg-background">
+        <div className="flex items-center justify-between border-b border-border bg-zinc-50 px-3 py-2">
           <div className="flex items-center gap-2">
             <FileIconFor path={activePath} className="size-3.5 text-muted-foreground" />
             <p className="truncate text-xs text-foreground">{activePath || "No file selected"}</p>
@@ -82,9 +82,9 @@ export function CodeViewer({ files }: { files: Record<string, string> }) {
           {activePath ? (
             <SyntaxHighlighter
               language={language}
-              style={vscDarkPlus}
+              style={oneLight}
               showLineNumbers
-              lineNumberStyle={{ minWidth: "2.5em", paddingRight: "1em", color: "#6e7681" }}
+              lineNumberStyle={{ minWidth: "2.5em", paddingRight: "1em", color: "#a1a1aa" }}
               customStyle={{
                 margin: 0,
                 padding: 0,
@@ -192,7 +192,7 @@ function TreeNodeItem({
           <button
             type="button"
             onClick={() => setIsOpen((prev) => !prev)}
-            className="flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-xs text-muted-foreground transition-colors hover:bg-white/5"
+            className="flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-xs text-muted-foreground transition-colors hover:bg-zinc-200/60"
             style={{ paddingLeft }}
           >
             {isOpen ? (
@@ -230,7 +230,7 @@ function TreeNodeItem({
         "flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-xs transition-colors",
         isActive
           ? "bg-[#ff5800]/15 text-foreground"
-          : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
+          : "text-muted-foreground hover:bg-zinc-200/60 hover:text-foreground"
       )}
       style={{ paddingLeft }}
     >

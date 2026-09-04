@@ -1,9 +1,4 @@
-import type { Metadata } from "next"
 import { BuilderWorkspace } from "@/components/builder-workspace"
-
-export const metadata: Metadata = {
-  title: "Builder",
-}
 
 export default async function BuilderPage({
   params,

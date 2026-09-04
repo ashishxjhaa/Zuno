@@ -4,6 +4,7 @@ import "@workspace/ui/globals.css"
 import { cn } from "@workspace/ui/lib/utils"
 import { Toaster } from "@workspace/ui/components/sonner"
 import { SessionProvider } from "@/lib/session"
+import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site"
 
 const schibstedGrotesk = Schibsted_Grotesk({
   subsets: ["latin"],
@@ -11,12 +12,9 @@ const schibstedGrotesk = Schibsted_Grotesk({
 })
 
 export const metadata: Metadata = {
-  title: {
-    default: "Zuno",
-    template: "%s · Zuno",
-  },
-  description:
-    "Zuno is an AI website builder. Describe an idea and get a live Vite + React + TypeScript site you can iterate on through chat.",
+  metadataBase: new URL(SITE_URL),
+  title: SITE_NAME,
+  description: SITE_DESCRIPTION,
   icons: {
     icon: [
       { url: "/zuno.svg", type: "image/svg+xml" },
@@ -34,7 +32,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={cn("dark antialiased", schibstedGrotesk.variable, "font-sans")}
+      className={cn("antialiased", schibstedGrotesk.variable, "font-sans")}
       suppressHydrationWarning
     >
       <body>

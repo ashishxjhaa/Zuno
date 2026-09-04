@@ -50,8 +50,42 @@
   --font-sans: var(--font-sans);
 }
 
-/* Claude-like dark surface; orange is the only accent. */
-:root,
+/* Light surface; orange remains the accent. */
+:root {
+  --background: #ffffff;
+  --foreground: #111111;
+  --card: #ffffff;
+  --card-foreground: #111111;
+  --popover: #ffffff;
+  --popover-foreground: #111111;
+  --primary: #ff5800;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #18181b;
+  --muted: #f4f4f5;
+  --muted-foreground: #71717a;
+  --accent: #f4f4f5;
+  --accent-foreground: #18181b;
+  --destructive: #ef4444;
+  --border: rgb(15 17 21 / 8%);
+  --input: rgb(15 17 21 / 10%);
+  --ring: #ff5800;
+  --chart-1: #ff5800;
+  --chart-2: #71717a;
+  --chart-3: #a1a1aa;
+  --chart-4: #e4e4e7;
+  --chart-5: #f4f4f5;
+  --radius: 0.75rem;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #111111;
+  --sidebar-primary: #ff5800;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f4f4f5;
+  --sidebar-accent-foreground: #18181b;
+  --sidebar-border: rgb(15 17 21 / 8%);
+  --sidebar-ring: #ff5800;
+}
+
 .dark {
   --background: #1c1c1a;
   --foreground: #f4f3ee;
@@ -147,4 +181,74 @@
   display: none;
   width: 0;
   height: 0;
+}
+
+/* hero-sky: make.design meadow stack */
+.hero-sky {
+  isolation: isolate;
+  position: relative;
+}
+
+.hero-sky::before {
+  content: "";
+  z-index: 0;
+  filter: blur(18px);
+  background: url(/background-blur.png) 50% / cover no-repeat;
+  position: absolute;
+  inset: 0;
+  transform: scale(1.1);
+}
+
+.hero-sky::after {
+  content: "";
+  z-index: 1;
+  background:
+    -webkit-image-set(
+      url(/background.avif) type("image/avif"),
+      url(/background.webp) type("image/webp"),
+      url(/background.png) type("image/png")
+    )
+    50% / cover no-repeat;
+  background:
+    image-set(
+      url(/background.avif) type("image/avif"),
+      url(/background.webp) type("image/webp"),
+      url(/background.png) type("image/png")
+    )
+    50% / cover no-repeat;
+  position: absolute;
+  inset: 0;
+}
+
+@keyframes sway {
+  0%,
+  to {
+    transform: rotate(-6deg);
+  }
+  50% {
+    transform: rotate(6deg);
+  }
+}
+
+.flower-sway {
+  transform-origin: 50% 90%;
+  animation: 6s ease-in-out infinite sway;
+}
+
+@keyframes marquee-left {
+  0% {
+    transform: translate(0);
+  }
+  to {
+    transform: translate(-50%);
+  }
+}
+
+@keyframes marquee-right {
+  0% {
+    transform: translate(-50%);
+  }
+  to {
+    transform: translate(0);
+  }
 }

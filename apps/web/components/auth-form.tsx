@@ -2,20 +2,13 @@
 
 import { useState, type FormEvent } from "react"
 import { useRouter } from "next/navigation"
+import Image from "next/image"
 import Link from "next/link"
-import { LoaderIcon } from "lucide-react"
+import { EyeIcon, EyeOffIcon, LoaderIcon } from "lucide-react"
 import { toast } from "sonner"
-import { Button } from "@workspace/ui/components/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@workspace/ui/components/card"
-import { Input } from "@workspace/ui/components/input"
-import { Label } from "@workspace/ui/components/label"
+import { cn } from "@workspace/ui/lib/utils"
 import { useSession } from "@/lib/session"
+import { SITE_NAME } from "@/lib/site"
 
 type AuthMode = "signin" | "signup"
 
@@ -65,6 +58,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
   const { signin, signup } = useSession()
   const [values, setValues] = useState({ name: "", email: "", password: "" })
   const [pending, setPending] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   const isSignin = mode === "signin"
   const fields = isSignin ? SIGNIN_FIELDS : SIGNUP_FIELDS
@@ -111,71 +105,152 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
   }
 
   return (
-    <Card className="w-full max-w-sm border-white/10 bg-card/80 shadow-none backdrop-blur-md">
-      <CardHeader>
-        <CardTitle>{isSignin ? "Sign in" : "Create an account"}</CardTitle>
-        <CardDescription>
-          {isSignin
-            ? "Use your email to continue building."
-            : "We’ll use your name in the navbar after you sign in."}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form className="space-y-4" onSubmit={(event) => void onSubmit(event)}>
-          {fields.map((field) => (
-            <div key={field.name} className="space-y-2">
-              <Label htmlFor={field.name}>{field.label}</Label>
-              <Input
-                id={field.name}
-                name={field.name}
-                type={field.type}
-                placeholder={field.placeholder}
-                autoComplete={field.autoComplete}
-                disabled={pending}
-                value={values[field.name]}
-                onChange={(event) =>
-                  setValues((prev) => ({
-                    ...prev,
-                    [field.name]: event.target.value,
-                  }))
-                }
-                className="border-white/15 bg-white/5 focus-visible:border-white/30 focus-visible:ring-white/15"
-              />
-            </div>
-          ))}
+    <div className="relative w-full max-w-[400px]">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -inset-10 -z-10 rounded-[32px] opacity-90 blur-2xl"
+        style={{
+          background:
+            "radial-gradient(60% 60% at 30% 20%, rgba(255,88,0,0.14) 0%, transparent 70%), radial-gradient(50% 50% at 80% 80%, rgba(124,92,252,0.12) 0%, transparent 70%)",
+        }}
+      />
 
-          <Button type="submit" className="w-full" disabled={pending}>
-            {pending ? (
+      <div className="rounded-[20px] border border-black/[0.04] bg-[#EDE4FF] p-2.5 sm:p-3">
+        <div className="rounded-[16px] border border-black/[0.04] bg-white p-5 sm:p-7">
+          <div className="flex flex-col items-center text-center">
+            <Link href="/" className="inline-flex items-center gap-2">
+              <Image src="/zuno.svg" alt="" width={32} height={32} priority />
+              <span className="text-[18px] font-semibold tracking-tight text-zinc-950">
+                {SITE_NAME}
+              </span>
+            </Link>
+            <h1
+              className="mt-5 text-[26px] leading-[1.15] tracking-[-0.03em] text-[#1f1f1f] sm:text-[30px]"
+              style={{
+                fontFamily: 'Georgia, "Times New Roman", Times, serif',
+              }}
+            >
+              {isSignin ? "Sign in" : "Sign up"}
+            </h1>
+          </div>
+
+          <form
+            className="mt-5 space-y-3 sm:mt-6 sm:space-y-3.5"
+            onSubmit={(event) => void onSubmit(event)}
+          >
+            {fields.map((field) => {
+              const isPassword = field.name === "password"
+              return (
+                <div key={field.name} className="space-y-2">
+                  <label
+                    htmlFor={field.name}
+                    className="block text-[13px] font-medium text-zinc-700"
+                  >
+                    {field.label}
+                  </label>
+                  <div className="relative">
+                    <input
+                      id={field.name}
+                      name={field.name}
+                      type={
+                        isPassword
+                          ? showPassword
+                            ? "text"
+                            : "password"
+                          : field.type
+                      }
+                      placeholder={field.placeholder}
+                      autoComplete={field.autoComplete}
+                      disabled={pending}
+                      value={values[field.name]}
+                      onChange={(event) =>
+                        setValues((prev) => ({
+                          ...prev,
+                          [field.name]: event.target.value,
+                        }))
+                      }
+                      className={cn(
+                        "h-10 w-full rounded-md border border-zinc-200 bg-[#FAFAFA] px-3.5 text-[14.5px] text-zinc-950 outline-none transition-[border-color,box-shadow,background-color]",
+                        isPassword ? "pr-11" : "",
+                        "placeholder:text-zinc-400",
+                        "hover:border-zinc-300",
+                        "focus:border-zinc-300 focus:bg-white focus:ring-4 focus:ring-zinc-900/5",
+                        "disabled:cursor-not-allowed disabled:opacity-60"
+                      )}
+                    />
+                    {isPassword ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((prev) => !prev)}
+                        disabled={pending}
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                        className="absolute top-1/2 right-3 -translate-y-1/2 rounded-md p-1 text-zinc-400 transition-colors hover:text-zinc-700 disabled:opacity-50"
+                      >
+                        {showPassword ? (
+                          <EyeOffIcon className="size-4" />
+                        ) : (
+                          <EyeIcon className="size-4" />
+                        )}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              )
+            })}
+
+            <button
+              type="submit"
+              disabled={pending}
+              className={cn(
+                "mt-2 inline-flex h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-[#ff5800] px-4 text-[14.5px] font-semibold text-white transition-colors",
+                "hover:bg-[#e04e00]",
+                "disabled:cursor-not-allowed disabled:opacity-70"
+              )}
+            >
+              {pending ? (
+                <>
+                  <LoaderIcon className="size-4 animate-spin" />
+                  {isSignin ? "Signing in..." : "Creating account..."}
+                </>
+              ) : isSignin ? (
+                "Sign in"
+              ) : (
+                "Create account"
+              )}
+            </button>
+          </form>
+
+          <p className="mt-4 text-center text-[13.5px] text-zinc-500">
+            {isSignin ? (
               <>
-                <LoaderIcon className="size-4 animate-spin" />
-                {isSignin ? "Signing in…" : "Creating account…"}
+                No account?{" "}
+                <Link
+                  href="/signup"
+                  className="font-semibold text-[#ff5800] transition-colors hover:text-[#e04e00]"
+                >
+                  Sign up
+                </Link>
               </>
-            ) : isSignin ? (
-              "Sign in"
             ) : (
-              "Sign up"
+              <>
+                Already have an account?{" "}
+                <Link
+                  href="/signin"
+                  className="font-semibold text-[#ff5800] transition-colors hover:text-[#e04e00]"
+                >
+                  Sign in
+                </Link>
+              </>
             )}
-          </Button>
-        </form>
+          </p>
 
-        <p className="mt-4 text-center text-sm text-muted-foreground">
-          {isSignin ? (
-            <>
-              No account?{" "}
-              <Link href="/signup" className="text-foreground hover:underline">
-                Sign up
-              </Link>
-            </>
-          ) : (
-            <>
-              Already have an account?{" "}
-              <Link href="/signin" className="text-foreground hover:underline">
-                Sign in
-              </Link>
-            </>
-          )}
-        </p>
-      </CardContent>
-    </Card>
+          <p className="mt-3 text-center text-[12.5px] text-zinc-400">
+            <Link href="/" className="transition-colors hover:text-zinc-600">
+              ← Back to home
+            </Link>
+          </p>
+        </div>
+      </div>
+    </div>
   )
 }

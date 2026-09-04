@@ -230,7 +230,7 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
             onClick={() => setChatOpen((open) => !open)}
             aria-label={chatOpen ? "Hide chat" : "Show chat"}
             aria-pressed={chatOpen}
-            className="relative z-10 flex size-7 items-center justify-center rounded-md border border-[#f5af19]/40 bg-[#0a0a09] text-[#f5af19] transition-colors hover:bg-[#f5af19]/15"
+            className="relative z-10 flex size-7 items-center justify-center rounded-md border border-[#f5af19]/50 bg-background text-[#f5af19] shadow-sm transition-colors hover:bg-[#f5af19]/10"
           >
             {chatOpen ? (
               <PanelLeftCloseIcon className="size-3.5" />
@@ -240,7 +240,7 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
           </button>
         </div>
 
-        <section className="relative flex min-w-0 flex-1 flex-col bg-[#0a0a09]">
+        <section className="relative flex min-w-0 flex-1 flex-col bg-background">
           <div className="flex items-center justify-between border-b border-border px-3 py-2">
             <div className="flex gap-1.5">
               {TABS.map((item) => {
@@ -256,7 +256,7 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
                       "gap-1.5",
                       active
                         ? "bg-primary text-primary-foreground"
-                        : "border-white/15 bg-transparent text-muted-foreground hover:bg-white/8 hover:text-foreground"
+                        : "border-border bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
                     )}
                   >
                     <Icon className="size-3.5" />

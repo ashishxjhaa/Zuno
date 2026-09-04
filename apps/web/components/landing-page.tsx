@@ -1,86 +1,41 @@
 "use client"
 
-import { CloudShader } from "@workspace/ui/components/cloud-shader"
-import { ImagesBadge } from "@workspace/ui/components/images-badge"
-import { WobbleCard } from "@workspace/ui/components/wobble-card"
 import { PromptBox } from "@/components/prompt-box"
-import { DottedDivider } from "@/components/dotted-divider"
+import { HeroSky } from "@/components/hero-sky"
+import { IdeaToLife } from "@/components/idea-to-life"
+import { ModernFeatures } from "@/components/modern-features"
+import { ShowcaseMarquee } from "@/components/showcase-marquee"
 import { SiteFooter } from "@/components/site-footer"
 import { SiteHeader } from "@/components/site-header"
-
-const BADGE_IMAGES = [
-  "/examples/site-1.png",
-  "/examples/site-2.png",
-  "/examples/site-3.png",
-]
-
-const FEATURES = [
-  {
-    title: "Describe it",
-    body: "One sentence is enough. Zuno turns it into a Vite + React + TypeScript site.",
-    containerClassName: "col-span-1 lg:col-span-2 bg-[#2a1810]",
-    bodyClassName: "text-neutral-200",
-  },
-  {
-    title: "Watch it build",
-    body: "Live preview in a sandbox while the site comes together.",
-    containerClassName: "col-span-1 bg-[#ff5800]",
-    bodyClassName: "text-white/85",
-  },
-  {
-    title: "Chat to change it",
-    body: "You can view the code. Updates happen through chat, not by editing files yourself.",
-    containerClassName: "col-span-1 lg:col-span-3 bg-[#262624]",
-    bodyClassName: "text-neutral-200",
-  },
-] as const
 
 export function LandingPage() {
   return (
     <div className="min-h-screen bg-background">
-      <SiteHeader />
+      <SiteHeader variant="meadow" />
 
-      <CloudShader className="h-screen min-h-dvh w-full">
-        <div className="mx-auto flex h-full min-h-dvh w-full max-w-6xl flex-col items-center justify-center px-6 pt-16">
-          <ImagesBadge
-            text="Build a website from a prompt"
-            images={BADGE_IMAGES}
-          />
-          <h1 className="mt-16 bg-black/70 px-4 py-2 text-2xl font-medium tracking-tight text-white shadow-[3px_3px_0_0_rgba(0,0,0,0.5)] md:mt-20 md:text-3xl">
-            Prompt. Preview. Ship.
-          </h1>
-          <div className="mt-8 flex w-full justify-center">
-            <PromptBox />
-          </div>
+      <HeroSky>
+        <h1
+          className="text-center text-white"
+          style={{
+            fontFamily: 'Georgia, "Times New Roman", Times, serif',
+            fontSize: "clamp(44px, 13vw, 70px)",
+            lineHeight: 1.1,
+            letterSpacing: "clamp(-2.4px, -0.34vw, -1.1px)",
+            margin: 0,
+          }}
+        >
+          <span className="block">Prompt. Preview. Ship.</span>
+        </h1>
+        <div className="mt-10 w-full max-w-[640px] sm:mt-14">
+          <PromptBox variant="meadow" />
         </div>
-      </CloudShader>
+      </HeroSky>
 
-      <div className="mx-auto w-full max-w-6xl px-6 py-16">
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          {FEATURES.map((feature) => (
-            <WobbleCard
-              key={feature.title}
-              containerClassName={feature.containerClassName}
-              className="py-10 sm:py-12"
-            >
-              <h2 className="max-w-sm text-left text-2xl font-semibold tracking-tight text-white md:text-3xl">
-                {feature.title}
-              </h2>
-              <p
-                className={`mt-4 max-w-md text-left text-sm ${feature.bodyClassName}`}
-              >
-                {feature.body}
-              </p>
-            </WobbleCard>
-          ))}
-        </div>
-      </div>
+      <ShowcaseMarquee />
+      <div id="how-it-works"><IdeaToLife /></div>
+      <div id="modern-sites"><ModernFeatures /></div>
 
-      <DottedDivider />
-
-      <div className="mx-auto w-full max-w-6xl px-6">
-        <SiteFooter />
-      </div>
+      <SiteFooter />
     </div>
   )
 }
