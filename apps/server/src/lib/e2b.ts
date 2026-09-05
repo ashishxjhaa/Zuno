@@ -481,10 +481,58 @@ export async function updateProjectFile(
   if (!(await sandbox.files.exists(target))) {
     throw new Error(`File not found: ${relativePath}`)
   }
+  // Guard: models sometimes send back only the section they meant to edit.
+  // A verbatim slice of the current file can never be a legit full rewrite.
+  const current = await sandbox.files.read(target)
+  const trimmed = contents.trim()
+  if (trimmed.length + 64 < current.length && current.includes(trimmed)) {
+    throw new Error(
+      `Refused: contents are only a fragment of the existing ${relativePath}. ` +
+        `updateFile replaces the WHOLE file — resend the complete file, or use editFile for a targeted edit.`
+    )
+  }
   await sandbox.files.write(
     target,
     preserveDevServerBind(relativePath, contents)
   )
+}
+
+/**
+ * Targeted in-place edit: replace exact `find` text with `replace`.
+ * Fails safely when the anchor is missing or ambiguous, so files can
+ * never be silently truncated by partial overwrites.
+ */
+export async function editProjectFile(
+  sandbox: Sandbox,
+  relativePath: string,
+  find: string,
+  replace: string,
+  replaceAll = false
+) {
+  const target = toSandboxPath(relativePath)
+  if (!(await sandbox.files.exists(target))) {
+    throw new Error(`File not found: ${relativePath}`)
+  }
+  if (!find) {
+    throw new Error("find must not be empty")
+  }
+  const current = await sandbox.files.read(target)
+  const occurrences = current.split(find).length - 1
+  if (occurrences === 0) {
+    throw new Error(
+      `find text not found in ${relativePath}. Read the file again and copy the exact snippet.`
+    )
+  }
+  if (occurrences > 1 && !replaceAll) {
+    throw new Error(
+      `find text matches ${occurrences} places in ${relativePath}. Include more surrounding context or set replaceAll.`
+    )
+  }
+  const next = replaceAll
+    ? current.split(find).join(replace)
+    : current.replace(find, replace)
+  await sandbox.files.write(target, preserveDevServerBind(relativePath, next))
+  return occurrences
 }
 
 export async function deleteProjectFile(

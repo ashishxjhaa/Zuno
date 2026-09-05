@@ -25,6 +25,8 @@ function getDeepseek() {
   return new OpenAI({
     apiKey,
     baseURL: "https://api.deepseek.com",
+    timeout: 60_000,
+    maxRetries: 1,
   })
 }
 

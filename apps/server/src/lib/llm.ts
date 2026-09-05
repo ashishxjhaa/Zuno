@@ -8,6 +8,7 @@ import {
   connectSandbox,
   createSandboxWithTemplate,
   deleteProjectFile,
+  editProjectFile,
   ensureDevServer,
   getPreviewUrl,
   installDependencies,
@@ -26,6 +27,12 @@ const pathSchema = z.object({ path: z.string().min(1) })
 const writeSchema = z.object({
   path: z.string().min(1),
   contents: z.string(),
+})
+const editSchema = z.object({
+  path: z.string().min(1),
+  find: z.string().min(1),
+  replace: z.string(),
+  replaceAll: z.boolean().optional(),
 })
 
 const tools: OpenAI.Chat.ChatCompletionTool[] = [
@@ -61,7 +68,7 @@ const tools: OpenAI.Chat.ChatCompletionTool[] = [
     function: {
       name: "updateFile",
       description:
-        "Replace an existing project file. Fails if the file does not exist.",
+        "Replace an ENTIRE existing file. You must send the COMPLETE new file contents from the first line to the last. Partial fragments corrupt the project and are rejected. For small targeted changes, use editFile instead.",
       parameters: {
         type: "object",
         properties: {
@@ -69,6 +76,24 @@ const tools: OpenAI.Chat.ChatCompletionTool[] = [
           contents: { type: "string" },
         },
         required: ["path", "contents"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "editFile",
+      description:
+        "Make a targeted edit inside an existing file without rewriting it. Replaces the exact `find` text with `replace` text. The find text must match the file exactly once unless replaceAll is true. Prefer this over updateFile for small changes.",
+      parameters: {
+        type: "object",
+        properties: {
+          path: { type: "string" },
+          find: { type: "string" },
+          replace: { type: "string" },
+          replaceAll: { type: "boolean" },
+        },
+        required: ["path", "find", "replace"],
       },
     },
   },
@@ -90,6 +115,7 @@ const KIND: Record<string, ToolCallKind> = {
   readFile: "READ_FILE",
   writeFile: "WRITE_FILE",
   updateFile: "UPDATE_FILE",
+  editFile: "UPDATE_FILE",
   deleteFile: "DELETE_FILE",
 }
 
@@ -126,6 +152,9 @@ function getDeepseek() {
   return new OpenAI({
     apiKey,
     baseURL: "https://api.deepseek.com",
+    // Never let a hung API call pin a build forever.
+    timeout: 120_000,
+    maxRetries: 1,
   })
 }
 
@@ -382,6 +411,9 @@ const META_REPLY_HARD_RE =
   /\b[\w.-]+\.(tsx|jsx|ts|js|css|json|html|md)\b|\b(em|en)[\s‐-―-]?dash|\btypograph|\bintact\b|\bthe ban\b/i
 const META_REPLY_SOFT_RE =
   /\b(I|I'|me|my|we|no)\b[^.!?]{0,80}\b(rules?|guidelines?|instructions?|bans?|banned|violat\w*|allow(?:ed|able)?|acceptable|permitted)\b/i
+// Model self-talk ("Now let me verify...", "I'll check...") is never a user reply.
+const META_REPLY_SELF_TALK_RE =
+  /\b(let me|i'?ll|i need to|now i'?ll?|i will)\b[^.!?]{0,60}\b(verify|double[\s-]?check|check|review|inspect|confirm|make sure|ensure|fix)\b|\b(no harm|already wrote|was identical|same as before)\b/i
 
 function shortenUserFacingReply(
   raw: string,
@@ -394,7 +426,8 @@ function shortenUserFacingReply(
   if (
     !cleaned ||
     META_REPLY_HARD_RE.test(cleaned) ||
-    META_REPLY_SOFT_RE.test(cleaned)
+    META_REPLY_SOFT_RE.test(cleaned) ||
+    META_REPLY_SELF_TALK_RE.test(cleaned)
   ) {
     return fallback
   }
@@ -609,6 +642,17 @@ async function runTool(sandbox: Sandbox, name: string, rawArgs: string) {
       const { path, contents } = writeSchema.parse(args)
       await updateProjectFile(sandbox, path, contents)
       return `Updated ${path}`
+    }
+    if (name === "editFile") {
+      const { path, find, replace, replaceAll } = editSchema.parse(args)
+      const count = await editProjectFile(
+        sandbox,
+        path,
+        find,
+        replace,
+        replaceAll ?? false
+      )
+      return `Edited ${path} (${count} ${count === 1 ? "place" : "places"})`
     }
     if (name === "deleteFile") {
       const { path } = pathSchema.parse(args)
