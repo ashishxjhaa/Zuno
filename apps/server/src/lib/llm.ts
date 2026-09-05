@@ -363,16 +363,41 @@ async function runGeneration(
     sandbox,
     messages,
     opts?.maxSteps ?? MAX_STEPS,
-    { saveAssistantText: true, handlers }
+    {
+      saveAssistantText: true,
+      handlers,
+      fallbackReply: opts?.firstPaint
+        ? "Your site is ready. Check the preview."
+        : undefined,
+    }
   )
 }
 
-function shortenUserFacingReply(raw: string) {
+/**
+ * The final reply is shown verbatim in chat. Self-review and rule-talk
+ * (file names, dash/typography lectures, "X is intact") must never reach
+ * the user — fall back to a plain completion message instead.
+ */
+const META_REPLY_HARD_RE =
+  /\b[\w.-]+\.(tsx|jsx|ts|js|css|json|html|md)\b|\b(em|en)[\s‐-―-]?dash|\btypograph|\bintact\b|\bthe ban\b/i
+const META_REPLY_SOFT_RE =
+  /\b(I|I'|me|my|we|no)\b[^.!?]{0,80}\b(rules?|guidelines?|instructions?|bans?|banned|violat\w*|allow(?:ed|able)?|acceptable|permitted)\b/i
+
+function shortenUserFacingReply(
+  raw: string,
+  fallback = "Done. Check the preview."
+) {
   const cleaned = raw
     .replace(/```[\s\S]*?```/g, "")
     .replace(/^#{1,6}\s+/gm, "")
     .trim()
-  if (!cleaned) return "Done. Check the preview."
+  if (
+    !cleaned ||
+    META_REPLY_HARD_RE.test(cleaned) ||
+    META_REPLY_SOFT_RE.test(cleaned)
+  ) {
+    return fallback
+  }
   const parts = cleaned.split(/(?<=[.!?])\s+/).filter(Boolean)
   const two = parts.slice(0, 2).join(" ").trim()
   if (two.length <= 220) return two
@@ -384,7 +409,11 @@ async function runToolLoop(
   sandbox: Sandbox,
   messages: ChatCompletionMessageParam[],
   maxSteps: number,
-  options: { saveAssistantText: boolean; handlers?: GenerateStreamHandlers }
+  options: {
+    saveAssistantText: boolean
+    handlers?: GenerateStreamHandlers
+    fallbackReply?: string
+  }
 ): Promise<GenerateStreamResult> {
   for (let step = 0; step < maxSteps; step++) {
     // DeepSeek Node SDK: pass thinking as a top-level body field (Python uses extra_body).
@@ -489,7 +518,8 @@ async function runToolLoop(
     if (toolCalls.length === 0) {
       if (options.saveAssistantText) {
         const text = shortenUserFacingReply(
-          content?.trim() || "Your site is ready. Check the preview."
+          content?.trim() ?? "",
+          options.fallbackReply
         )
         options.handlers?.onStatus?.("reply")
         await emitTextChunks(text, options.handlers?.onToken)
