@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { GlobeIcon, PanelLeftCloseIcon, PanelLeftOpenIcon } from "lucide-react"
+import { PanelLeftCloseIcon, PanelLeftOpenIcon } from "lucide-react"
 import { toast } from "sonner"
 import { BuilderSkeleton, rememberBuilderPhase } from "@/components/builder-skeleton"
 import { ChatPanel, type ChatMessage } from "@/components/chat-panel"
@@ -552,12 +552,11 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
               className={cn(
                 "cursor-pointer",
                 buttonVariants({ size: "sm" }),
-                "cursor-pointer gap-1.5 rounded-sm bg-[#ff5800] text-white hover:bg-[#e04e00]",
+                "cursor-pointer rounded-sm bg-[#ff5800] text-white hover:bg-[#e04e00]",
                 (workspaceLocked || publishing || !project?.previewUrl) &&
                   "pointer-events-none cursor-not-allowed opacity-40 hover:bg-[#ff5800]"
               )}
             >
-              <GlobeIcon className="size-3.5" />
               Publish
             </button>
           </div>
