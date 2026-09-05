@@ -345,8 +345,7 @@ export function ChatPanel({
 
   const stackDisabled = stackBusy || cooking
   const isStreaming = streamingText !== null
-  const showCooking =
-    cooking && !isStreaming && messages[messages.length - 1]?.from !== "ASSISTANT"
+  const showWorking = cooking && !displayedStream
   const showStack = Boolean(stackVisible && onConfirmStack && !cooking)
   const mascotState: ZunoMascotState = isStreaming
     ? "streaming"
@@ -434,9 +433,7 @@ export function ChatPanel({
     >
       <MessageScroller className="min-h-0 flex-1">
         <MessageScrollerViewport className={cn("px-4", planning ? "py-4" : "py-5")}>
-          <MessageScrollerContent
-            className={cn("gap-6", planning ? "justify-start" : "justify-end")}
-          >
+          <MessageScrollerContent className="min-h-0 justify-start gap-6">
             {messages.map((message) =>
               message.from === "USER" ? (
                 <MessageScrollerItem
@@ -470,30 +467,26 @@ export function ChatPanel({
               )
             )}
 
-            {isStreaming ? (
+            {isStreaming && displayedStream ? (
               <MessageScrollerItem key="streaming" messageId="streaming" scrollAnchor>
                 <Message align="start">
                   <ZunoAvatar state={mascotState} />
                   <MessageContent>
-                    {displayedStream ? (
-                      <Bubble align="start" variant="outline" className="max-w-[90%]">
-                        <BubbleContent className="whitespace-pre-wrap rounded-sm border-border bg-muted px-3.5 py-2.5 text-[13px] leading-relaxed text-foreground">
-                          <ChatMarkdown text={displayedStream} />
-                          <span className="ml-0.5 inline-block h-3.5 w-[2px] animate-pulse bg-[#ff5800] align-middle" />
-                        </BubbleContent>
-                      </Bubble>
-                    ) : (
-                      <WorkingStatus />
-                    )}
+                    <Bubble align="start" variant="outline" className="max-w-[90%]">
+                      <BubbleContent className="whitespace-pre-wrap rounded-sm border-border bg-muted px-3.5 py-2.5 text-[13px] leading-relaxed text-foreground">
+                        <ChatMarkdown text={displayedStream} />
+                        <span className="ml-0.5 inline-block h-3.5 w-[2px] animate-pulse bg-[#ff5800] align-middle" />
+                      </BubbleContent>
+                    </Bubble>
                   </MessageContent>
                 </Message>
               </MessageScrollerItem>
             ) : null}
 
-            {showCooking ? (
-              <MessageScrollerItem messageId="cooking">
+            {showWorking ? (
+              <MessageScrollerItem messageId="working">
                 <Message align="start">
-                  <ZunoAvatar state="thinking" />
+                  <ZunoAvatar state={mascotState} />
                   <MessageContent>
                     <WorkingStatus />
                   </MessageContent>

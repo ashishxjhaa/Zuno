@@ -7,6 +7,7 @@ import "dotenv/config"
 import cors from "cors"
 import cookieParser from "cookie-parser"
 import { authRouter } from "./routes/auth.routes"
+import { ideaRouter } from "./routes/idea.routes"
 import { projectRouter } from "./routes/project.routes"
 import { startIdleReaper } from "./lib/idle"
 
@@ -31,6 +32,7 @@ app.get("/", (_req, res) => {
 })
 
 app.use("/api/v1/auth", authRouter)
+app.use("/api/v1/ideas", ideaRouter)
 app.use("/api/v1/project", projectRouter)
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {

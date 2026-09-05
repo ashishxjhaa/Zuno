@@ -456,6 +456,7 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
   // Keep the mark over the iframe until generation is done and the preview has loaded.
   const showOverlay =
     !planning && (generating || !project?.previewUrl || !previewReady)
+  const workspaceLocked = showOverlay
   const splitChatWidth = chatCollapsed ? 0 : CHAT_WIDTH
 
   const chat = (
@@ -536,6 +537,7 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
                   <button
                     key={item}
                     type="button"
+                    disabled={workspaceLocked}
                     onClick={() => setTab(item)}
                     className={cn(
                       "cursor-pointer",
@@ -543,7 +545,9 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
                       "gap-1.5 rounded-sm",
                       active
                         ? "bg-primary text-primary-foreground"
-                        : "border-border bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
+                        : "border-border bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground",
+                      workspaceLocked &&
+                        "pointer-events-none cursor-not-allowed opacity-40 hover:bg-transparent"
                     )}
                   >
                     <Icon className="size-3.5" />
@@ -554,12 +558,14 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
             </div>
             <button
               type="button"
-              disabled={publishing || !project?.previewUrl}
+              disabled={workspaceLocked || publishing || !project?.previewUrl}
               onClick={() => void onPublish()}
               className={cn(
                 "cursor-pointer",
                 buttonVariants({ size: "sm" }),
-                "cursor-pointer gap-1.5 rounded-sm bg-[#ff5800] text-white hover:bg-[#e04e00]"
+                "cursor-pointer gap-1.5 rounded-sm bg-[#ff5800] text-white hover:bg-[#e04e00]",
+                (workspaceLocked || publishing || !project?.previewUrl) &&
+                  "pointer-events-none cursor-not-allowed opacity-40 hover:bg-[#ff5800]"
               )}
             >
               <GlobeIcon className="size-3.5" />

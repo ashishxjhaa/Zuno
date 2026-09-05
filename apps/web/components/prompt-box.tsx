@@ -1,33 +1,44 @@
 "use client"
 
-import { useState, type FormEvent, type KeyboardEvent } from "react"
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowRightIcon, ArrowUpIcon, Loader2Icon } from "lucide-react"
+import { ArrowRightIcon, ArrowUpIcon, DicesIcon, Loader2Icon } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@workspace/ui/components/button"
 import { Button as MovingBorder } from "@workspace/ui/components/moving-border"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { frontend } from "@/lib/api"
+import { pickLandingIdea } from "@/lib/ideas"
 import { useSession } from "@/lib/session"
 
 type PromptBoxProps = {
   variant?: "default" | "meadow"
 }
 
+const PENDING_PROMPT_KEY = "zuno:landing-prompt"
+
 export function PromptBox({ variant = "default" }: PromptBoxProps) {
   const router = useRouter()
-  const { user } = useSession()
+  const { user, isLoading } = useSession()
   const [value, setValue] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isInspiring, setIsInspiring] = useState(false)
   const meadow = variant === "meadow"
+  const autoStarted = useRef(false)
 
-  const submit = async () => {
-    if (!value.trim()) {
+  const submit = async (contents?: string) => {
+    const prompt = (contents ?? value).trim()
+    if (!prompt) {
       toast.error("Describe what you want to build")
       return
     }
 
     if (!user) {
+      try {
+        sessionStorage.setItem(PENDING_PROMPT_KEY, prompt)
+      } catch {
+        // ignore
+      }
       router.push("/signin")
       return
     }
@@ -35,9 +46,9 @@ export function PromptBox({ variant = "default" }: PromptBoxProps) {
     setIsSubmitting(true)
     try {
       const res = await frontend.post("/api/v1/project", {
-        initialPrompt: value,
+        initialPrompt: prompt,
       })
-      sessionStorage.setItem(`zuno:prompt:${res.data.id}`, value)
+      sessionStorage.setItem(`zuno:prompt:${res.data.id}`, prompt)
       router.push(`/builder/${res.data.id}`)
     } catch (error: unknown) {
       const data = (error as { response?: { data?: { error?: unknown } } })
@@ -53,6 +64,40 @@ export function PromptBox({ variant = "default" }: PromptBoxProps) {
     }
   }
 
+  useEffect(() => {
+    if (isLoading || autoStarted.current) return
+    try {
+      const pending = sessionStorage.getItem(PENDING_PROMPT_KEY)
+      if (!pending) return
+      setValue(pending)
+      if (!user) return
+      autoStarted.current = true
+      sessionStorage.removeItem(PENDING_PROMPT_KEY)
+      void submit(pending)
+    } catch {
+      // ignore
+    }
+  }, [isLoading, user])
+
+  const inspire = async () => {
+    if (isInspiring || isSubmitting) return
+    setIsInspiring(true)
+    try {
+      let idea = pickLandingIdea()
+      try {
+        const res = await frontend.post<{ idea: string }>("/api/v1/ideas/random")
+        if (res.data.idea?.trim()) {
+          idea = res.data.idea.trim()
+        }
+      } catch {
+        // Local idea if the API is old or offline.
+      }
+      setValue(idea)
+    } finally {
+      setIsInspiring(false)
+    }
+  }
+
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     void submit()
@@ -65,6 +110,8 @@ export function PromptBox({ variant = "default" }: PromptBoxProps) {
     }
   }
 
+  const busy = isSubmitting || isInspiring
+
   if (meadow) {
     return (
       <form
@@ -76,13 +123,27 @@ export function PromptBox({ variant = "default" }: PromptBoxProps) {
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={onKeyDown}
           placeholder="Describe what you want to build..."
-          disabled={isSubmitting}
+          disabled={busy}
           aria-label="Describe what you're building"
           rows={2}
           className="w-full resize-none bg-transparent p-3.5 text-[14.5px] outline-none placeholder:text-slate-400 sm:p-4 sm:text-[16px]"
           style={{ height: 66, overflowY: "hidden" }}
         />
-        <div className="flex items-center justify-end gap-2 px-2.5 pb-2.5 sm:px-3 sm:pb-3">
+        <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5 sm:px-3 sm:pb-3">
+          <button
+            type="button"
+            onClick={() => void inspire()}
+            disabled={busy}
+            aria-label="Surprise me with a random idea"
+            title="Surprise me"
+            className="inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-sm border border-[#ff5800] text-[#ff5800] transition-colors hover:bg-[#ff5800]/10 disabled:pointer-events-none disabled:opacity-40 sm:size-9"
+          >
+            {isInspiring ? (
+              <Loader2Icon className="size-4 animate-spin" />
+            ) : (
+              <DicesIcon className="size-4" />
+            )}
+          </button>
           <button
             type="submit"
             aria-label="Submit"
@@ -115,11 +176,25 @@ export function PromptBox({ variant = "default" }: PromptBoxProps) {
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={onKeyDown}
           placeholder="Describe the website you want to build..."
-          disabled={isSubmitting}
+          disabled={busy}
           rows={4}
           className="min-h-28 resize-none border-0 bg-transparent focus-visible:ring-0"
         />
-        <div className="flex justify-end px-3 pb-3">
+        <div className="flex items-center justify-between px-3 pb-3">
+          <button
+            type="button"
+            onClick={() => void inspire()}
+            disabled={busy}
+            aria-label="Surprise me with a random idea"
+            title="Surprise me"
+            className="inline-flex size-8 cursor-pointer items-center justify-center rounded-sm border border-[#ff5800] text-[#ff5800] hover:bg-[#ff5800]/10 disabled:pointer-events-none disabled:opacity-40"
+          >
+            {isInspiring ? (
+              <Loader2Icon className="size-4 animate-spin" />
+            ) : (
+              <DicesIcon className="size-4" />
+            )}
+          </button>
           <Button type="submit" size="sm" disabled={isSubmitting}>
             {isSubmitting ? (
               <Loader2Icon className="animate-spin" />
