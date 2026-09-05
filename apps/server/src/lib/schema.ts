@@ -33,14 +33,32 @@ export const createProjectSchema = z.object({
   initialPrompt: z
     .string()
     .trim()
-    .min(3, "Describe what you want to build")
+    .min(1, "Describe what you want to build")
     .max(8000, "Prompt is too long"),
 })
 
-export const conversationSchema = z.object({
-  contents: z
-    .string()
-    .trim()
-    .min(1, "Message is required")
-    .max(8000, "Message is too long"),
+export const conversationSchema = z
+  .object({
+    contents: z
+      .string()
+      .trim()
+      .max(8000, "Message is too long")
+      .optional(),
+    /** Resume a pending intake/generate turn (e.g. after create). */
+    resume: z.boolean().optional(),
+  })
+  .superRefine((value, ctx) => {
+    const contents = value.contents?.trim() ?? ""
+    if (!value.resume && !contents) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Message is required",
+        path: ["contents"],
+      })
+    }
+  })
+
+export const stackSchema = z.object({
+  framework: z.enum(["react", "nextjs"]),
+  language: z.enum(["javascript", "typescript"]),
 })

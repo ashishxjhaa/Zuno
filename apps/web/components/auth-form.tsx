@@ -108,15 +108,15 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
     <div className="relative w-full max-w-[400px]">
       <div
         aria-hidden
-        className="pointer-events-none absolute -inset-10 -z-10 rounded-[32px] opacity-90 blur-2xl"
+        className="pointer-events-none absolute -inset-10 -z-10 rounded-sm opacity-90 blur-2xl"
         style={{
           background:
             "radial-gradient(60% 60% at 30% 20%, rgba(255,88,0,0.14) 0%, transparent 70%), radial-gradient(50% 50% at 80% 80%, rgba(124,92,252,0.12) 0%, transparent 70%)",
         }}
       />
 
-      <div className="rounded-[20px] border border-black/[0.04] bg-[#EDE4FF] p-2.5 sm:p-3">
-        <div className="rounded-[16px] border border-black/[0.04] bg-white p-5 sm:p-7">
+      <div className="rounded-sm border border-black/[0.04] bg-[#EDE4FF] p-2.5 sm:p-3">
+        <div className="rounded-sm border border-black/[0.04] bg-white p-5 sm:p-7">
           <div className="flex flex-col items-center text-center">
             <Link href="/" className="inline-flex items-center gap-2">
               <Image src="/zuno.svg" alt="" width={32} height={32} priority />
@@ -170,7 +170,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
                         }))
                       }
                       className={cn(
-                        "h-10 w-full rounded-md border border-zinc-200 bg-[#FAFAFA] px-3.5 text-[14.5px] text-zinc-950 outline-none transition-[border-color,box-shadow,background-color]",
+                        "h-10 w-full rounded-sm border border-zinc-200 bg-[#FAFAFA] px-3.5 text-[14.5px] text-zinc-950 outline-none transition-[border-color,box-shadow,background-color]",
                         isPassword ? "pr-11" : "",
                         "placeholder:text-zinc-400",
                         "hover:border-zinc-300",
@@ -184,7 +184,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
                         onClick={() => setShowPassword((prev) => !prev)}
                         disabled={pending}
                         aria-label={showPassword ? "Hide password" : "Show password"}
-                        className="absolute top-1/2 right-3 -translate-y-1/2 rounded-md p-1 text-zinc-400 transition-colors hover:text-zinc-700 disabled:opacity-50"
+                        className="cursor-pointer absolute top-1/2 right-3 -translate-y-1/2 rounded-sm p-1 text-zinc-400 transition-colors hover:text-zinc-700 disabled:opacity-50"
                       >
                         {showPassword ? (
                           <EyeOffIcon className="size-4" />
@@ -202,7 +202,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
               type="submit"
               disabled={pending}
               className={cn(
-                "mt-2 inline-flex h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-[#ff5800] px-4 text-[14.5px] font-semibold text-white transition-colors",
+                "mt-2 inline-flex h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-sm bg-[#ff5800] px-4 text-[14.5px] font-semibold text-white transition-colors",
                 "hover:bg-[#e04e00]",
                 "disabled:cursor-not-allowed disabled:opacity-70"
               )}

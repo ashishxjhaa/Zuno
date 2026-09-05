@@ -24,6 +24,12 @@ enum ToolCallKind {
   UPDATE_FILE
 }
 
+enum ProjectPhase {
+  PLANNING
+  BUILDING
+  READY
+}
+
 model User {
   id       String    @id @default(cuid())
   name     String
@@ -39,6 +45,10 @@ model Project {
   id                  String                 @id @default(cuid())
   title               String
   initialPrompt       String
+  phase               ProjectPhase           @default(PLANNING)
+  framework           String?
+  language            String?
+  brief               String?
   sandboxId           String?
   previewUrl          String?
   published           Boolean                @default(false)

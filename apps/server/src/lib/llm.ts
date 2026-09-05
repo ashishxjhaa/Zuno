@@ -6,19 +6,21 @@ import type { ToolCallKind } from "../generated/prisma/client"
 import { prisma } from "./prisma"
 import {
   connectSandbox,
-  createProjectSandbox,
+  createSandboxWithTemplate,
   deleteProjectFile,
+  ensureDevServer,
+  getPreviewUrl,
+  installDependencies,
   listProjectFiles,
   readSandboxFile,
-  rebuildProject,
+  resolveTemplate,
   updateProjectFile,
   writeProjectFile,
 } from "./e2b"
-import { SYSTEM_PROMPT } from "../prompts/system"
+import { buildSystemPrompt } from "../prompts/system"
 
-const MAX_STEPS = 24
-const MAX_REPAIR_STEPS = 12
-const MAX_REPAIR_ATTEMPTS = 2
+const MAX_STEPS = 32
+const FIRST_BUILD_STEPS = 28
 
 const pathSchema = z.object({ path: z.string().min(1) })
 const writeSchema = z.object({
@@ -91,6 +93,31 @@ const KIND: Record<string, ToolCallKind> = {
   deleteFile: "DELETE_FILE",
 }
 
+
+/** Emit text in small chunks so the client can animate a live bubble. */
+async function emitTextChunks(
+  text: string,
+  onToken?: (token: string) => void
+) {
+  if (!onToken || !text) return
+  const size = 10
+  for (let i = 0; i < text.length; i += size) {
+    onToken(text.slice(i, i + size))
+    // Yield so SSE frames flush progressively.
+    await new Promise((r) => setTimeout(r, 8))
+  }
+}
+
+export type GenerateStreamHandlers = {
+  onToken?: (token: string) => void
+  onStatus?: (status: "tools" | "reply") => void
+}
+
+export type GenerateStreamResult = {
+  messageId: string | null
+  contents: string | null
+}
+
 function getDeepseek() {
   const apiKey = process.env.DEEPSEEK_API_KEY
   if (!apiKey) {
@@ -102,47 +129,161 @@ function getDeepseek() {
   })
 }
 
-// Create the E2B sandbox then run DeepSeek. Used after POST /project returns.
+// Fast path: prebaked sandbox -> Vite healthy -> preview URL -> LLM edits via HMR.
 export async function startProjectBuild(projectId: string) {
+  let sandbox: Sandbox | null = null
+  const t0 = Date.now()
   try {
-    const { sandboxId, previewUrl } = await createProjectSandbox()
+    // Phase A: create sandbox + ensureDevServer + set previewUrl/READY.
+    // Failures here are real sandbox errors.
+    const project = await prisma.project.findUnique({ where: { id: projectId } })
+    if (!project) {
+      throw new Error("Project not found")
+    }
+
+    const created = await createSandboxWithTemplate(
+      project.framework,
+      project.language
+    )
+    sandbox = created.sandbox
+    const { template, prebaked } = created
+    const sandboxId = sandbox.sandboxId
+
+    // Persist sandbox id only. Do not expose previewUrl until the port is open.
     await prisma.project.update({
       where: { id: projectId },
-      data: { sandboxId, previewUrl, lastActiveAt: new Date() },
+      data: {
+        sandboxId,
+        phase: "BUILDING",
+        lastActiveAt: new Date(),
+      },
     })
-    await generateForProject(projectId)
+
+    if (!prebaked) {
+      await installDependencies(sandbox)
+    }
+
+    // Bring Vite/Next up before LLM file churn so the first paint is reliable.
+    await ensureDevServer(sandbox, template.port, template.kind)
+    const previewUrl = getPreviewUrl(sandbox, template.port)
+    console.log(
+      `[bootstrap] ${projectId} preview up in ${Date.now() - t0}ms (prebaked=${prebaked})`
+    )
+    await prisma.project.update({
+      where: { id: projectId },
+      data: { previewUrl, phase: "READY" },
+    })
+
+    // Phase B: generation. On LLM failure keep sandbox + previewUrl alive.
+    try {
+      await runGeneration(projectId, {
+        maxSteps: FIRST_BUILD_STEPS,
+        firstPaint: true,
+      })
+
+      // LLM may rewrite package.json / vite.config; make sure the listener survived.
+      try {
+        const live = await connectSandbox(sandboxId)
+        await ensureDevServer(live, template.port, template.kind)
+      } catch (error) {
+        console.error(`[bootstrap] ${projectId} post-gen ensureDevServer`, error)
+      }
+    } catch (genError) {
+      console.error(`[bootstrap] ${projectId} generation`, genError)
+      try {
+        await prisma.conversationHistory.create({
+          data: {
+            projectId,
+            type: "TEXT_MESSAGE",
+            from: "ASSISTANT",
+            contents:
+              "Preview is up, but generation hit an API error. Try again in chat.",
+          },
+        })
+      } catch {
+        // project may already be gone
+      }
+    }
+
+    await prisma.project.update({
+      where: { id: projectId },
+      data: { isGenerating: false },
+    })
   } catch (error) {
     console.error(`[bootstrap] ${projectId}`, error)
+    if (sandbox) {
+      try {
+        await sandbox.kill()
+      } catch {
+        // ignore
+      }
+    }
+    const reason =
+      error instanceof Error && error.message.trim()
+        ? error.message.trim().slice(0, 500)
+        : "Unknown sandbox error"
+    const userMessage = reason.toLowerCase().includes("could not start")
+      ? reason
+      : `Could not start the sandbox. ${reason}`
     try {
       await prisma.conversationHistory.create({
         data: {
           projectId,
           type: "TEXT_MESSAGE",
           from: "ASSISTANT",
-          contents: "Could not start the sandbox.",
+          contents: userMessage,
+        },
+      })
+      await prisma.project.update({
+        where: { id: projectId },
+        data: {
+          isGenerating: false,
+          previewUrl: null,
+          sandboxId: null,
         },
       })
     } catch {
       // project may already be gone
     }
+  } finally {
     try {
-      await prisma.project.update({
+      const current = await prisma.project.findUnique({
         where: { id: projectId },
-        data: { isGenerating: false },
+        select: { isGenerating: true },
       })
+      if (current?.isGenerating) {
+        await prisma.project.update({
+          where: { id: projectId },
+          data: { isGenerating: false },
+        })
+      }
     } catch {
       // ignore
     }
   }
 }
 
-// Load project chat, run DeepSeek with file tools, save the assistant reply.
-export async function generateForProject(projectId: string) {
+// Chat updates: write files then ensure the HMR server is up.
+// Optional handlers stream the final assistant text (tool rounds stay non-stream).
+export async function generateForProject(
+  projectId: string,
+  handlers?: GenerateStreamHandlers
+): Promise<GenerateStreamResult> {
+  let result: GenerateStreamResult = { messageId: null, contents: null }
   try {
-    await runGeneration(projectId)
+    result = await runGeneration(projectId, undefined, handlers)
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+    })
+    if (project?.sandboxId) {
+      const info = resolveTemplate(project.framework, project.language)
+      const sandbox = await connectSandbox(project.sandboxId)
+      await ensureDevServer(sandbox, info.port, info.kind)
+    }
   } catch (error) {
     console.error(`[generate] ${projectId}`, error)
-    await prisma.conversationHistory.create({
+    // Do not kill sandbox / clear previewUrl on LLM errors after preview is up.
+    const saved = await prisma.conversationHistory.create({
       data: {
         projectId,
         type: "TEXT_MESSAGE",
@@ -150,19 +291,12 @@ export async function generateForProject(projectId: string) {
         contents: "Something went wrong while generating. Try again in chat.",
       },
     })
-  } finally {
-    try {
-      const project = await prisma.project.findUnique({
-        where: { id: projectId },
-      })
-      if (project?.sandboxId) {
-        const sandbox = await connectSandbox(project.sandboxId)
-        await rebuildUntilOk(projectId, sandbox)
-      }
-    } catch (error) {
-      console.error(`[generate] rebuild failed ${projectId}`, error)
+    result = {
+      messageId: saved.id,
+      contents: saved.contents,
     }
-
+    handlers?.onToken?.(saved.contents)
+  } finally {
     try {
       await prisma.project.update({
         where: { id: projectId },
@@ -172,69 +306,15 @@ export async function generateForProject(projectId: string) {
       console.error(`[generate] clear flag ${projectId}`, error)
     }
   }
-}
-
-// Build; if Vite fails, ask the model to fix exports/TS and retry.
-async function rebuildUntilOk(projectId: string, sandbox: Sandbox) {
-  for (let attempt = 0; attempt <= MAX_REPAIR_ATTEMPTS; attempt++) {
-    const result = await rebuildProject(sandbox)
-    if (result.ok) {
-      return
-    }
-
-    if (attempt === MAX_REPAIR_ATTEMPTS) {
-      console.error(`[build] ${projectId} still failing after repairs`)
-      await prisma.conversationHistory.create({
-        data: {
-          projectId,
-          type: "TEXT_MESSAGE",
-          from: "ASSISTANT",
-          contents:
-            "The site files were written, but the production build still has errors. Tell me what you see and I’ll fix it.",
-        },
-      })
-      return
-    }
-
-    console.log(`[build] ${projectId} repair attempt ${attempt + 1}`)
-    await repairBuild(projectId, sandbox, result.error)
-  }
-}
-
-// Short tool loop that only fixes the given Vite build error.
-async function repairBuild(
-  projectId: string,
-  sandbox: Sandbox,
-  buildError: string
-) {
-  const project = await prisma.project.findUnique({ where: { id: projectId } })
-  if (!project?.sandboxId) {
-    return
-  }
-
-  const files = await listProjectFiles(project.sandboxId)
-  const messages: ChatCompletionMessageParam[] = [
-    { role: "system", content: SYSTEM_PROMPT },
-    {
-      role: "system",
-      content: `Project files:\n${Object.keys(files).sort().join("\n") || "(empty)"}`,
-    },
-    {
-      role: "user",
-      content: `The Vite production build failed. Fix ONLY the compile/export errors so \`npx vite build\` succeeds. Use named exports consistently (export function X / import { X }). Do not redesign the site.
-
-Build error:
-${buildError.slice(0, 6000)}`,
-    },
-  ]
-
-  await runToolLoop(projectId, sandbox, messages, MAX_REPAIR_STEPS, {
-    saveAssistantText: false,
-  })
+  return result
 }
 
 // Connect to the sandbox and loop until DeepSeek replies without tools.
-async function runGeneration(projectId: string) {
+async function runGeneration(
+  projectId: string,
+  opts?: { maxSteps?: number; firstPaint?: boolean },
+  handlers?: GenerateStreamHandlers
+): Promise<GenerateStreamResult> {
   const project = await prisma.project.findUnique({ where: { id: projectId } })
   if (!project?.sandboxId) {
     throw new Error("Project has no sandbox")
@@ -247,23 +327,56 @@ async function runGeneration(projectId: string) {
     orderBy: { createdAt: "asc" },
   })
 
+  const system = buildSystemPrompt({
+    framework: project.framework,
+    language: project.language,
+    brief: project.brief,
+  })
+
   const messages: ChatCompletionMessageParam[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: system },
     {
       role: "system",
       content: `Project files:\n${Object.keys(files).sort().join("\n") || "(empty)"}`,
     },
+  ]
+
+  if (opts?.firstPaint) {
+    messages.push({
+      role: "system",
+      content:
+        "First paint: immediately replace the placeholder page (app/page or src/App) so the preview is never left on a blank/building screen. Ship a finished-looking site. Prefer writing the entry page as one complete file first, then split components if steps remain. Match the quality bar (art direction, real copy, nav/hero/sections/footer). Do not change package.json scripts or vite/next server host/port settings.",
+    })
+  }
+
+  messages.push(
     ...history.map((row) => ({
       role: (row.from === "USER" ? "user" : "assistant") as
         | "user"
         | "assistant",
       content: row.contents,
-    })),
-  ]
+    }))
+  )
 
-  await runToolLoop(projectId, sandbox, messages, MAX_STEPS, {
-    saveAssistantText: true,
-  })
+  return await runToolLoop(
+    projectId,
+    sandbox,
+    messages,
+    opts?.maxSteps ?? MAX_STEPS,
+    { saveAssistantText: true, handlers }
+  )
+}
+
+function shortenUserFacingReply(raw: string) {
+  const cleaned = raw
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/^#{1,6}\s+/gm, "")
+    .trim()
+  if (!cleaned) return "Done. Check the preview."
+  const parts = cleaned.split(/(?<=[.!?])\s+/).filter(Boolean)
+  const two = parts.slice(0, 2).join(" ").trim()
+  if (two.length <= 220) return two
+  return `${two.slice(0, 217).trim()}...`
 }
 
 async function runToolLoop(
@@ -271,26 +384,116 @@ async function runToolLoop(
   sandbox: Sandbox,
   messages: ChatCompletionMessageParam[],
   maxSteps: number,
-  options: { saveAssistantText: boolean }
-) {
+  options: { saveAssistantText: boolean; handlers?: GenerateStreamHandlers }
+): Promise<GenerateStreamResult> {
   for (let step = 0; step < maxSteps; step++) {
-    const completion = await getDeepseek().chat.completions.create({
-      model: "deepseek-v4-flash",
-      messages,
-      tools,
-    })
+    // DeepSeek Node SDK: pass thinking as a top-level body field (Python uses extra_body).
+    // Disable for codegen tool loops (speed/reliability). Still pass reasoning_content when present.
+    // When streaming handlers exist, stream the model turn; tool rounds suppress content tokens.
+    const wantStream = Boolean(options.handlers?.onToken)
 
-    const choice = completion.choices[0]?.message
-    if (!choice) {
-      throw new Error("Empty model response")
+    let content: string | null = null
+    let reasoning_content: string | null | undefined
+    let toolCalls: NonNullable<
+      OpenAI.Chat.ChatCompletionMessage["tool_calls"]
+    > = []
+
+    if (wantStream) {
+      const stream = await getDeepseek().chat.completions.create({
+        model: "deepseek-v4-flash",
+        messages,
+        tools,
+        stream: true,
+        thinking: { type: "disabled" },
+      } as OpenAI.Chat.ChatCompletionCreateParamsStreaming)
+
+      let full = ""
+      const toolAcc = new Map<
+        number,
+        { id: string; name: string; arguments: string }
+      >()
+      let sawTools = false
+
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta as
+          | {
+              content?: string | null
+              tool_calls?: Array<{
+                index?: number
+                id?: string
+                function?: { name?: string; arguments?: string }
+              }>
+              reasoning_content?: string | null
+            }
+          | undefined
+        if (!delta) continue
+
+        if (typeof delta.reasoning_content === "string") {
+          reasoning_content = (reasoning_content ?? "") + delta.reasoning_content
+        }
+
+        if (delta.tool_calls?.length) {
+          if (!sawTools) {
+            sawTools = true
+            options.handlers?.onStatus?.("tools")
+          }
+          for (const part of delta.tool_calls) {
+            const idx = part.index ?? 0
+            const prev = toolAcc.get(idx) ?? {
+              id: "",
+              name: "",
+              arguments: "",
+            }
+            if (part.id) prev.id = part.id
+            if (part.function?.name) prev.name += part.function.name
+            if (part.function?.arguments) prev.arguments += part.function.arguments
+            toolAcc.set(idx, prev)
+          }
+        }
+
+        if (delta.content) {
+          full += delta.content
+          // Buffer only. Emit after we know this turn is a final user-facing reply
+          // (no tools), and only the shortened text.
+        }
+      }
+
+      content = full
+      toolCalls = [...toolAcc.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([, t]) => ({
+          id: t.id,
+          type: "function" as const,
+          function: { name: t.name, arguments: t.arguments },
+        }))
+    } else {
+      const completion = await getDeepseek().chat.completions.create({
+        model: "deepseek-v4-flash",
+        messages,
+        tools,
+        thinking: { type: "disabled" },
+      } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming)
+
+      const choice = completion.choices[0]?.message
+      if (!choice) {
+        throw new Error("Empty model response")
+      }
+      const apiMessage = choice as typeof choice & {
+        reasoning_content?: string | null
+      }
+      content = apiMessage.content
+      reasoning_content = apiMessage.reasoning_content
+      toolCalls = apiMessage.tool_calls ?? []
     }
 
-    const toolCalls = choice.tool_calls ?? []
     if (toolCalls.length === 0) {
       if (options.saveAssistantText) {
-        const text =
-          choice.content?.trim() || "Your site is ready. Check the preview."
-        await prisma.conversationHistory.create({
+        const text = shortenUserFacingReply(
+          content?.trim() || "Your site is ready. Check the preview."
+        )
+        options.handlers?.onStatus?.("reply")
+        await emitTextChunks(text, options.handlers?.onToken)
+        const saved = await prisma.conversationHistory.create({
           data: {
             projectId,
             type: "TEXT_MESSAGE",
@@ -298,15 +501,19 @@ async function runToolLoop(
             contents: text,
           },
         })
+        return { messageId: saved.id, contents: text }
       }
-      return
+      return { messageId: null, contents: null }
     }
+
+    options.handlers?.onStatus?.("tools")
 
     messages.push({
       role: "assistant",
-      content: choice.content,
+      content,
       tool_calls: toolCalls,
-    })
+      reasoning_content,
+    } as ChatCompletionMessageParam)
 
     for (const call of toolCalls) {
       if (call.type !== "function") continue
@@ -338,16 +545,21 @@ async function runToolLoop(
   }
 
   if (options.saveAssistantText) {
-    await prisma.conversationHistory.create({
+    const text =
+      "Stopped after too many file edits. Check the preview and tell me what to change."
+    options.handlers?.onStatus?.("reply")
+    await emitTextChunks(text, options.handlers?.onToken)
+    const saved = await prisma.conversationHistory.create({
       data: {
         projectId,
         type: "TEXT_MESSAGE",
         from: "ASSISTANT",
-        contents:
-          "Stopped after too many file edits. Check the preview and tell me what to change.",
+        contents: text,
       },
     })
+    return { messageId: saved.id, contents: text }
   }
+  return { messageId: null, contents: null }
 }
 
 // Run one file tool on the sandbox. Returns a string for the model.

@@ -1,8 +1,14 @@
 import type { Request, Response } from "express"
-import { conversationSchema, createProjectSchema } from "../lib/schema"
+import {
+  conversationSchema,
+  createProjectSchema,
+  stackSchema,
+} from "../lib/schema"
 import { prisma } from "../lib/prisma"
 import { extendSandboxTimeout, listProjectFiles } from "../lib/e2b"
-import { generateForProject, startProjectBuild } from "../lib/llm"
+import { generateForProject } from "../lib/llm"
+import { confirmStackAndBuild, runIntakeTurnStreaming } from "../lib/intake"
+import { initSse, keepAliveSse, sendSse } from "../lib/sse"
 
 export async function create(req: Request, res: Response) {
   try {
@@ -25,6 +31,7 @@ export async function create(req: Request, res: Response) {
         title,
         initialPrompt,
         userId: req.userId,
+        phase: "PLANNING",
         isGenerating: true,
       },
     })
@@ -38,10 +45,7 @@ export async function create(req: Request, res: Response) {
       },
     })
 
-    void startProjectBuild(project.id).catch((error) => {
-      console.error(`[bootstrap] ${project.id}`, error)
-    })
-
+    // Client opens conversation SSE with resume:true to stream the first intake reply.
     return res.status(201).json({ id: project.id })
   } catch {
     return res.status(500).json({
@@ -93,11 +97,14 @@ export async function getById(req: Request, res: Response) {
       previewUrl: project.previewUrl,
       isGenerating: project.isGenerating,
       published: project.published,
+      phase: project.phase,
+      framework: project.framework,
+      language: project.language,
+      brief: project.brief,
       messages: history.map((message) => ({
         id: message.id,
         from: message.from,
         contents: message.contents,
-        createdAt: message.createdAt,
       })),
       files,
     })
@@ -109,6 +116,152 @@ export async function getById(req: Request, res: Response) {
 }
 
 export async function conversation(req: Request, res: Response) {
+  if (!req.userId) {
+    return res.status(401).json({ error: "Unauthorized" })
+  }
+
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id
+  if (!id) {
+    return res.status(400).json({ error: "Project id is required" })
+  }
+
+  const parsed = conversationSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: parsed.error.issues[0]?.message || "Invalid request",
+    })
+  }
+
+  const project = await prisma.project.findUnique({ where: { id } })
+  if (!project || project.userId !== req.userId) {
+    return res.status(404).json({ error: "Project not found" })
+  }
+
+  const resume = Boolean(parsed.data.resume)
+  const contents = parsed.data.contents?.trim() ?? ""
+
+  if (project.phase === "BUILDING") {
+    return res.status(409).json({ error: "Still generating" })
+  }
+
+  // Resume only when a turn is already pending (create / interrupted).
+  if (resume) {
+    if (!project.isGenerating) {
+      return res.status(409).json({ error: "Nothing to resume" })
+    }
+  } else if (project.isGenerating) {
+    return res.status(409).json({ error: "Still generating" })
+  }
+
+  if (project.phase === "READY" && !project.sandboxId) {
+    return res.status(400).json({ error: "Project is not ready" })
+  }
+
+  if (!resume && contents) {
+    await prisma.conversationHistory.create({
+      data: {
+        projectId: id,
+        type: "TEXT_MESSAGE",
+        from: "USER",
+        contents,
+      },
+    })
+  }
+
+  await prisma.project.update({
+    where: { id },
+    data: { isGenerating: true, lastActiveAt: new Date() },
+  })
+
+  initSse(res)
+  const ping = keepAliveSse(res)
+  let closed = false
+  req.on("close", () => {
+    closed = true
+  })
+
+  const emitToken = (text: string) => {
+    if (!closed) sendSse(res, "token", { text })
+  }
+
+  try {
+    if (project.phase === "PLANNING") {
+      const result = await runIntakeTurnStreaming(id, emitToken)
+      if (!result) {
+        sendSse(res, "error", { error: "Intake is not available" })
+        return
+      }
+      // Replace any raw ready-JSON suffix the client may have shown mid-stream.
+      sendSse(res, "replace", { text: result.visible })
+      sendSse(res, "done", {
+        message: {
+          id: result.messageId,
+          from: "ASSISTANT",
+          contents: result.visible,
+        },
+        brief: result.brief,
+        title: result.title ?? null,
+        phase: "PLANNING",
+        isGenerating: false,
+      })
+      return
+    }
+
+    // READY: tool loop (non-stream) then stream final assistant text.
+    const result = await generateForProject(id, {
+      onToken: emitToken,
+      onStatus: (status) => {
+        if (!closed) sendSse(res, "status", { status })
+      },
+    })
+
+    const latest = await prisma.project.findUnique({
+      where: { id },
+      select: {
+        phase: true,
+        isGenerating: true,
+        brief: true,
+        previewUrl: true,
+      },
+    })
+
+    sendSse(res, "done", {
+      message: result.messageId
+        ? {
+            id: result.messageId,
+            from: "ASSISTANT",
+            contents: result.contents ?? "",
+          }
+        : null,
+      brief: latest?.brief ?? null,
+      phase: latest?.phase ?? "READY",
+      isGenerating: false,
+      previewUrl: latest?.previewUrl ?? null,
+    })
+  } catch (error) {
+    console.error(`[conversation] ${id}`, error)
+    try {
+      await prisma.project.update({
+        where: { id },
+        data: { isGenerating: false },
+      })
+    } catch {
+      // ignore
+    }
+    if (!closed) {
+      sendSse(res, "error", {
+        error: "Something went wrong. Try again in chat.",
+      })
+    }
+  } finally {
+    clearInterval(ping)
+    if (!closed) {
+      res.end()
+    }
+  }
+}
+
+export async function setStack(req: Request, res: Response) {
   try {
     if (!req.userId) {
       return res.status(401).json({ error: "Unauthorized" })
@@ -119,7 +272,7 @@ export async function conversation(req: Request, res: Response) {
       return res.status(400).json({ error: "Project id is required" })
     }
 
-    const parsed = conversationSchema.safeParse(req.body)
+    const parsed = stackSchema.safeParse(req.body)
     if (!parsed.success) {
       return res.status(400).json({
         error: parsed.error.issues[0]?.message || "Invalid request",
@@ -131,31 +284,27 @@ export async function conversation(req: Request, res: Response) {
       return res.status(404).json({ error: "Project not found" })
     }
 
-    if (!project.sandboxId) {
-      return res.status(400).json({ error: "Project is not ready" })
+    if (project.phase !== "PLANNING") {
+      return res.status(409).json({ error: "Stack already chosen" })
+    }
+
+    if (!project.brief?.trim()) {
+      return res.status(409).json({ error: "Finish clarifying first" })
     }
 
     if (project.isGenerating) {
       return res.status(409).json({ error: "Still generating" })
     }
 
-    await prisma.conversationHistory.create({
-      data: {
-        projectId: id,
-        type: "TEXT_MESSAGE",
-        from: "USER",
-        contents: parsed.data.contents,
-      },
-    })
+    const result = await confirmStackAndBuild(
+      id,
+      parsed.data.framework,
+      parsed.data.language
+    )
 
-    await prisma.project.update({
-      where: { id },
-      data: { isGenerating: true, lastActiveAt: new Date() },
-    })
-
-    void generateForProject(id).catch((error) => {
-      console.error(`[generate] ${id}`, error)
-    })
+    if (!result.ok) {
+      return res.status(409).json({ error: result.error })
+    }
 
     return res.status(200).json({ ok: true })
   } catch {

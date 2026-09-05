@@ -4,75 +4,314 @@ import { fileURLToPath } from "node:url"
 import { CommandExitError, FileType, Sandbox } from "e2b"
 
 const PROJECT_DIR = "/home/user/project"
-const VITE_PORT = 5173
-const SKIP_DIRS = new Set(["node_modules", "dist", ".git", ".vite"])
-const TEMPLATE_DIR = path.join(
+const SKIP_DIRS = new Set(["node_modules", "dist", ".git", ".vite", ".next"])
+const TEMPLATES_ROOT = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
-  "../../templates/vite-react-ts"
+  "../../templates"
 )
+const DEV_LOG = "/tmp/zuno-dev-server.log"
+/**
+ * Next cold compile can block HTTP for several seconds after the port opens.
+ * Prefer a fast TCP probe so hung page compiles do not burn the wait budget.
+ */
+const WAIT_ATTEMPTS = 60
+const WAIT_MS = 250
 
-// Create a VM, copy the Vite template, install deps, build it, and start a static preview server.
-export async function createProjectSandbox() {
-  const sandbox = await Sandbox.create({
+export type TemplateInfo = {
+  name: string
+  kind: "vite" | "next"
+  port: number
+}
+
+export type SandboxBoot = {
+  sandbox: Sandbox
+  template: TemplateInfo
+  /** True when created from a prebaked E2B template with bun + deps. */
+  prebaked: boolean
+}
+
+export function resolveTemplate(
+  framework?: string | null,
+  language?: string | null
+): TemplateInfo {
+  const lang = language === "javascript" ? "js" : "ts"
+  if (framework === "nextjs") {
+    return { name: `next-${lang}`, kind: "next", port: 3000 }
+  }
+  return { name: `vite-react-${lang}`, kind: "vite", port: 5173 }
+}
+
+/** Env var name for the prebaked E2B template alias for this stack. */
+export function e2bTemplateEnvKey(
+  framework?: string | null,
+  language?: string | null
+): string {
+  const info = resolveTemplate(framework, language)
+  if (info.name === "vite-react-ts") return "E2B_TEMPLATE_REACT_TS"
+  if (info.name === "vite-react-js") return "E2B_TEMPLATE_REACT_JS"
+  if (info.name === "next-ts") return "E2B_TEMPLATE_NEXT_TS"
+  if (info.name === "next-js") return "E2B_TEMPLATE_NEXT_JS"
+  return "E2B_TEMPLATE_REACT_TS"
+}
+
+/** Resolve prebaked template alias from env, or null if unset. */
+export function resolveE2bTemplateAlias(
+  framework?: string | null,
+  language?: string | null
+): string | null {
+  const envKey = e2bTemplateEnvKey(framework, language)
+  const altKey = envKey.replace("E2B_TEMPLATE_REACT_", "E2B_TEMPLATE_VITE_REACT_")
+  const alias =
+    process.env[envKey]?.trim() ||
+    process.env[altKey]?.trim() ||
+    process.env.E2B_TEMPLATE?.trim() ||
+    ""
+  return alias || null
+}
+
+export function getPreviewUrl(sandbox: Sandbox, port: number) {
+  return `https://${sandbox.getHost(port)}`
+}
+
+/**
+ * Prefer a prebaked E2B template (bun + node_modules + app scaffold).
+ * Cold path copies local templates and runs bun install (misses 10-12s SLA).
+ */
+export async function createSandboxWithTemplate(
+  framework?: string | null,
+  language?: string | null
+) {
+  const template = resolveTemplate(framework, language)
+  const alias = resolveE2bTemplateAlias(framework, language)
+  const sandboxOpts = {
     timeoutMs: 60 * 60 * 1000,
     secure: false,
     network: {
       allowPublicTraffic: true,
       maskRequestHost: "localhost:${PORT}",
     },
-  })
+  } as const
+
+  if (alias) {
+    console.log(`[sandbox] creating from prebaked template ${alias}`)
+    const sandbox = await Sandbox.create(alias, sandboxOpts)
+    return { sandbox, template, prebaked: true as const }
+  }
+
+  if (process.env.E2B_ALLOW_SLOW_FALLBACK !== "1") {
+    throw new Error(
+      `Missing E2B template for ${template.name}. Set the matching E2B_TEMPLATE_* env var (required for 10-12s preview).`
+    )
+  }
+
+  console.warn(
+    `[sandbox] slow fallback for ${template.name}: copying files and installing deps`
+  )
+  const templateDir = path.join(TEMPLATES_ROOT, template.name)
+  const sandbox = await Sandbox.create(sandboxOpts)
 
   try {
-    const files = await collectTemplateFiles(TEMPLATE_DIR)
+    const files = await collectTemplateFiles(templateDir)
     await sandbox.files.write(files)
-
-    const install = await sandbox.commands.run("npm install", {
-      cwd: PROJECT_DIR,
-      timeoutMs: 180_000,
-    })
-    if (install.exitCode !== 0) {
-      console.error(`[install] ${sandbox.sandboxId} failed`, install.stderr || install.stdout)
-      throw new Error(`npm install failed`)
-    }
-
-    const built = await buildProject(sandbox)
-    if (!built.ok) {
-      throw new Error(`Initial template build failed: ${built.error}`)
-    }
-    await startPreview(sandbox)
-
-    return {
-      sandboxId: sandbox.sandboxId,
-      previewUrl: `https://${sandbox.getHost(VITE_PORT)}`,
-    }
+    await ensureBun(sandbox)
+    return { sandbox, template, prebaked: false as const }
   } catch (error) {
     await sandbox.kill()
     throw error
   }
 }
 
-// Reconnect to an existing sandbox by id.
 export async function connectSandbox(sandboxId: string) {
   return Sandbox.connect(sandboxId)
 }
 
-// Shut down the sandbox.
 export async function killSandbox(sandboxId: string) {
   await Sandbox.kill(sandboxId)
 }
 
-// Push the VM lifetime to E2B's max so a published preview stays up.
 export async function extendSandboxTimeout(sandboxId: string) {
   await Sandbox.setTimeout(sandboxId, 24 * 60 * 60 * 1000)
 }
 
-// Build the project into /home/user/project/dist.
-async function buildProject(sandbox: Sandbox) {
+async function ensureBun(sandbox: Sandbox) {
+  if (await hasBun(sandbox)) {
+    return
+  }
+  console.log(`[bun] ${sandbox.sandboxId} installing ...`)
+  const install = await sandbox.commands.run(
+    'export BUN_INSTALL="/home/user/.bun"; curl -fsSL https://bun.sh/install | bash',
+    { timeoutMs: 120_000, envs: bunEnv() }
+  )
+  if (install.exitCode !== 0) {
+    throw new Error("Failed to install bun in sandbox")
+  }
+  if (!(await hasBun(sandbox))) {
+    throw new Error("bun installed but binary missing at /home/user/.bun/bin/bun")
+  }
+}
+
+async function hasBun(sandbox: Sandbox) {
+  try {
+    // E2B command envs do not reliably override PATH, so probe the absolute binary.
+    const check = await sandbox.commands.run(
+      "test -x /home/user/.bun/bin/bun && /home/user/.bun/bin/bun --version",
+      { timeoutMs: 10_000, envs: bunEnv() }
+    )
+    return check.exitCode === 0
+  } catch {
+    return false
+  }
+}
+
+function bunEnv() {
+  return {
+    BUN_INSTALL: "/home/user/.bun",
+    PATH: "/home/user/.bun/bin:/usr/local/bin:/usr/bin:/bin",
+  }
+}
+
+/** Cold-path only. Prebaked templates already have node_modules. */
+export async function installDependencies(sandbox: Sandbox) {
+  console.log(`[install] ${sandbox.sandboxId} cold bun install ...`)
+  await ensureBun(sandbox)
+  const install = await sandbox.commands.run("/home/user/.bun/bin/bun install", {
+    cwd: PROJECT_DIR,
+    timeoutMs: 180_000,
+    envs: runtimeEnv(),
+  })
+  if (install.exitCode !== 0) {
+    console.error(
+      `[install] ${sandbox.sandboxId} failed`,
+      install.stderr || install.stdout
+    )
+    throw new Error("bun install failed")
+  }
+}
+
+/**
+ * Start the stack's package.json "dev" script (or a node/vite|next fallback).
+ * Retries once with fresh logs if the port never opens.
+ *
+ * Prebaked E2B images sometimes lack the bun binary at runtime even when
+ * node_modules exist. Prefer bun when present; otherwise run Next/Vite via node.
+ */
+export async function startDevServer(
+  sandbox: Sandbox,
+  port: number,
+  kind: "vite" | "next" = port === 3000 ? "next" : "vite"
+) {
+  let lastError: unknown
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    await killPortListener(sandbox, port)
+    const cmd = await resolveDevCommand(sandbox, port, kind)
+    console.log(
+      `[dev] ${sandbox.sandboxId} starting on ${port} (attempt ${attempt}): ${cmd}`
+    )
+    try {
+      await sandbox.commands.run(`rm -f ${DEV_LOG}; (${cmd}) >${DEV_LOG} 2>&1`, {
+        cwd: PROJECT_DIR,
+        background: true,
+        timeoutMs: 0,
+        envs: runtimeEnv(),
+      })
+      await waitForServer(sandbox, port, kind)
+      console.log(`[dev] ${sandbox.sandboxId} listening on ${port}`)
+      return
+    } catch (error) {
+      lastError = error
+      const log = await readDevLog(sandbox)
+      console.error(
+        `[dev] ${sandbox.sandboxId} attempt ${attempt} failed`,
+        log.slice(0, 2000) || (error instanceof Error ? error.message : error)
+      )
+    }
+  }
+  const log = await readDevLog(sandbox)
+  const detail = log.slice(0, 1500) || String(lastError)
+  throw new Error(
+    `Dev server did not start on ${port} (${kind}). ${summarizeDevFailure(detail)}`
+  )
+}
+
+export async function ensureDevServer(
+  sandbox: Sandbox,
+  port: number,
+  kind: "vite" | "next" = port === 3000 ? "next" : "vite"
+) {
+  if (await isServerUp(sandbox, port)) {
+    return
+  }
+  await startDevServer(sandbox, port, kind)
+}
+
+async function resolveDevCommand(
+  sandbox: Sandbox,
+  port: number,
+  kind: "vite" | "next"
+) {
+  if (await hasBun(sandbox)) {
+    // Absolute path: E2B drops custom PATH from command envs at runtime.
+    return "/home/user/.bun/bin/bun run dev"
+  }
+  // Prebaked images sometimes lack bun at runtime even when node_modules exist.
+  console.warn(
+    `[dev] ${sandbox.sandboxId} bun missing; falling back to node ${kind}`
+  )
+  if (kind === "next") {
+    // Match template scripts: bind 0.0.0.0 so the E2B preview proxy can reach it.
+    return `node ./node_modules/next/dist/bin/next dev --hostname 0.0.0.0 --port ${port}`
+  }
+  return `node ./node_modules/vite/bin/vite.js --host 0.0.0.0 --port ${port} --strictPort`
+}
+
+function runtimeEnv() {
+  // Keep bun on PATH when present; node lives under /usr/local/bin on E2B base.
+  return bunEnv()
+}
+
+function summarizeDevFailure(detail: string) {
+  const lower = detail.toLowerCase()
+  if (lower.includes("bun: command not found") || lower.includes("bun: not found")) {
+    return (
+      "bun was missing in the sandbox and the node fallback did not come up. " +
+      detail
+    )
+  }
+  if (lower.includes("cannot find module") || lower.includes("enoent")) {
+    return (
+      "Dependencies look incomplete in the sandbox. Rebuild the E2B template. " +
+      detail
+    )
+  }
+  if (lower.includes("eaddrinuse")) {
+    return "Dev port was still busy after cleanup. " + detail
+  }
+  return detail
+}
+
+async function readDevLog(sandbox: Sandbox) {
+  try {
+    const result = await sandbox.commands.run(
+      `tail -n 80 ${DEV_LOG} 2>/dev/null || true`,
+      { timeoutMs: 5_000 }
+    )
+    return (result.stdout || "").trim()
+  } catch {
+    return ""
+  }
+}
+
+export async function buildProduction(sandbox: Sandbox) {
   console.log(`[build] ${sandbox.sandboxId} ...`)
   try {
-    await sandbox.commands.run("npx vite build", {
+    const has = await hasBun(sandbox)
+    const cmd = has
+      ? "/home/user/.bun/bin/bun run build"
+      : "node ./node_modules/vite/bin/vite.js build 2>/dev/null || node ./node_modules/next/dist/bin/next build"
+    await sandbox.commands.run(cmd, {
       cwd: PROJECT_DIR,
       timeoutMs: 180_000,
+      envs: bunEnv(),
     })
     return { ok: true as const }
   } catch (error) {
@@ -87,32 +326,13 @@ async function buildProject(sandbox: Sandbox) {
   }
 }
 
-// Kill any process on the preview port and serve the built dist folder.
-async function startPreview(sandbox: Sandbox) {
-  await killPortListener(sandbox)
-  await sandbox.commands.run("npm run preview", {
-    cwd: PROJECT_DIR,
-    background: true,
-    timeoutMs: 0,
-  })
-  await waitForServer(sandbox)
-}
-
-// Rebuild and restart preview so the latest files are served.
-export async function rebuildProject(sandbox: Sandbox) {
-  const result = await buildProject(sandbox)
-  if (!result.ok) {
-    return result
-  }
-  await startPreview(sandbox)
-  return { ok: true as const }
-}
-
-async function killPortListener(sandbox: Sandbox) {
+async function killPortListener(sandbox: Sandbox, port: number) {
   const killCommands = [
     "pkill -f 'vite' || true",
-    "fuser -k 5173/tcp 2>/dev/null || true",
-    "kill -9 $(lsof -ti:5173) 2>/dev/null || true",
+    "pkill -f 'next-server' || true",
+    "pkill -f 'next dev' || true",
+    `fuser -k ${port}/tcp 2>/dev/null || true`,
+    `kill -9 $(lsof -ti:${port}) 2>/dev/null || true`,
   ]
   for (const cmd of killCommands) {
     try {
@@ -121,37 +341,70 @@ async function killPortListener(sandbox: Sandbox) {
       // ignore
     }
   }
+  // Brief pause so the port is free before relaunch.
+  await new Promise((resolve) => setTimeout(resolve, 200))
 }
 
-// Poll until the server answers on port 5173.
-async function waitForServer(sandbox: Sandbox) {
-  const probe =
-    "node -e \"fetch('http://127.0.0.1:5173').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""
-  const logProbe =
-    "cat /home/user/project/dist/index.html 2>/dev/null || ls /home/user/project/"
-
-  for (let i = 0; i < 60; i++) {
-    try {
-      await sandbox.commands.run(probe, { timeoutMs: 5_000 })
-      return
-    } catch (error) {
-      if (i === 45 || i === 55) {
-        console.error(`[preview] ${sandbox.sandboxId} still not up, debug:`, error)
-        try {
-          const log = await sandbox.commands.run(logProbe, { timeoutMs: 5_000 })
-          console.error(`[preview] ${sandbox.sandboxId} debug output:`, log.stdout, log.stderr)
-        } catch {
-          // ignore debug probe errors
-        }
-      }
-      await new Promise((resolve) => setTimeout(resolve, 1_000))
-    }
+async function isServerUp(sandbox: Sandbox, port: number) {
+  // Fast TCP check: Next can accept connections while still compiling `/`,
+  // and a full HTTP fetch may hang until compile finishes (blowing the wait budget).
+  const tcp = `node -e "const n=require('net');const s=n.connect(${port},'127.0.0.1',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1));setTimeout(()=>process.exit(1),1500)"`
+  try {
+    await sandbox.commands.run(tcp, { timeoutMs: 3_000, envs: runtimeEnv() })
+    return true
+  } catch {
+    // Fall through to a short HTTP probe (Vite sometimes needs a real request).
   }
-
-  throw new Error("Preview server did not start")
+  const http = `node -e "const c=new AbortController();setTimeout(()=>c.abort(),1500);fetch('http://127.0.0.1:${port}/',{signal:c.signal}).then(()=>process.exit(0)).catch(()=>process.exit(1))"`
+  try {
+    await sandbox.commands.run(http, { timeoutMs: 3_000, envs: runtimeEnv() })
+    return true
+  } catch {
+    return false
+  }
 }
 
-// List project files as path → contents (skips node_modules, dist, etc.).
+async function waitForServer(
+  sandbox: Sandbox,
+  port: number,
+  kind: "vite" | "next" = port === 3000 ? "next" : "vite"
+) {
+  for (let i = 0; i < WAIT_ATTEMPTS; i++) {
+    if (await isServerUp(sandbox, port)) {
+      return
+    }
+    // Surface early crashes instead of waiting the full budget.
+    if (i === 8 || i === 20) {
+      const log = await readDevLog(sandbox)
+      if (
+        /bun: command not found|Cannot find module|EADDRINUSE|Error:/i.test(log) &&
+        !(await isPortListening(sandbox, port))
+      ) {
+        throw new Error(
+          summarizeDevFailure(log.slice(0, 1200) || "Dev process exited early")
+        )
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, WAIT_MS))
+  }
+  const log = await readDevLog(sandbox)
+  throw new Error(
+    summarizeDevFailure(
+      log.slice(0, 1200) || `Dev server did not start on ${port} (${kind})`
+    )
+  )
+}
+
+async function isPortListening(sandbox: Sandbox, port: number) {
+  const cmd = `node -e "const n=require('net');const s=n.connect(${port},'127.0.0.1',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1));setTimeout(()=>process.exit(1),800)"`
+  try {
+    await sandbox.commands.run(cmd, { timeoutMs: 2_000, envs: runtimeEnv() })
+    return true
+  } catch {
+    return false
+  }
+}
+
 export async function listProjectFiles(sandboxId: string) {
   const sandbox = await connectSandbox(sandboxId)
   const files: Record<string, string> = {}
@@ -159,13 +412,11 @@ export async function listProjectFiles(sandboxId: string) {
   return files
 }
 
-// Read one file from the project folder in the sandbox.
 export async function readProjectFile(sandboxId: string, relativePath: string) {
   const sandbox = await connectSandbox(sandboxId)
   return readSandboxFile(sandbox, relativePath)
 }
 
-// Read the local Vite template into [{ path in VM, contents }].
 async function collectTemplateFiles(
   dir: string,
   prefix = ""
@@ -180,7 +431,6 @@ async function collectTemplateFiles(
     if (entry.isDirectory()) {
       files.push(...(await collectTemplateFiles(abs, rel)))
     } else {
-      // Templates ship as *.tpl so Vercel typecheck ignores them; restore real names in the sandbox.
       const dest = rel.endsWith(".tpl") ? rel.slice(0, -4) : rel
       files.push({
         path: `${PROJECT_DIR}/${dest}`,
@@ -192,7 +442,6 @@ async function collectTemplateFiles(
   return files
 }
 
-// List and read all files inside the sandbox project directory.
 async function walkFiles(
   sandbox: Sandbox,
   absDir: string,
@@ -212,39 +461,105 @@ async function walkFiles(
   }
 }
 
-// Write a file in the sandbox project (creates folders as needed).
 export async function writeProjectFile(
   sandbox: Sandbox,
   relativePath: string,
-  contents: string,
+  contents: string
 ) {
-  await sandbox.files.write(toSandboxPath(relativePath), contents)
+  await sandbox.files.write(
+    toSandboxPath(relativePath),
+    preserveDevServerBind(relativePath, contents)
+  )
 }
 
-// Overwrite an existing file. Errors if the path is missing.
 export async function updateProjectFile(
   sandbox: Sandbox,
   relativePath: string,
-  contents: string,
+  contents: string
 ) {
   const target = toSandboxPath(relativePath)
   if (!(await sandbox.files.exists(target))) {
     throw new Error(`File not found: ${relativePath}`)
   }
-  await sandbox.files.write(target, contents)
+  await sandbox.files.write(
+    target,
+    preserveDevServerBind(relativePath, contents)
+  )
 }
 
-// Delete a file or folder in the sandbox project.
 export async function deleteProjectFile(
   sandbox: Sandbox,
-  relativePath: string,
+  relativePath: string
 ) {
   await sandbox.files.remove(toSandboxPath(relativePath))
 }
 
-// Read a file using an already-connected sandbox.
 export async function readSandboxFile(sandbox: Sandbox, relativePath: string) {
   return sandbox.files.read(toSandboxPath(relativePath))
+}
+
+/**
+ * Keep Vite/Next reachable from the E2B preview proxy if the LLM rewrites config.
+ */
+export function preserveDevServerBind(relativePath: string, contents: string) {
+  const normalized = relativePath.replace(/\\/g, "/").replace(/^\/+/, "")
+  const base = normalized.split("/").pop() || normalized
+
+  if (base === "package.json") {
+    try {
+      const pkg = JSON.parse(contents) as {
+        scripts?: Record<string, string>
+      }
+      if (pkg.scripts && typeof pkg.scripts.dev === "string") {
+        let dev = pkg.scripts.dev
+        if (/\bvite\b/.test(dev)) {
+          if (!/(--host\b|-h\b|--host=)/.test(dev)) {
+            dev = `${dev} --host`
+          }
+          if (!/(--port\b|-p\b|--port=)/.test(dev)) {
+            dev = `${dev} --port 5173`
+          } else {
+            dev = dev.replace(/--port(=|\s+)\d+/g, "--port 5173")
+            dev = dev.replace(/(?:^|\s)-p\s+\d+/g, " -p 5173")
+          }
+          pkg.scripts.dev = dev.replace(/\s+/g, " ").trim()
+          return `${JSON.stringify(pkg, null, 2)}\n`
+        }
+        if (/\bnext\b/.test(dev)) {
+          if (!/(-H\b|--hostname\b)/.test(dev)) {
+            dev = `${dev} -H 0.0.0.0`
+          }
+          if (!/(-p\b|--port\b)/.test(dev)) {
+            dev = `${dev} -p 3000`
+          }
+          pkg.scripts.dev = dev.replace(/\s+/g, " ").trim()
+          return `${JSON.stringify(pkg, null, 2)}\n`
+        }
+      }
+    } catch {
+      return contents
+    }
+  }
+
+  if (/^vite\.config\.(ts|js|mts|mjs)$/.test(base)) {
+    let next = contents
+    if (!/host\s*:\s*(true|['\"]0\.0\.0\.0['\"])/.test(next)) {
+      if (/server\s*:\s*\{/.test(next)) {
+        next = next.replace(/server\s*:\s*\{/, "server: {\n    host: true,")
+      }
+    }
+    if (!/port\s*:\s*5173/.test(next)) {
+      if (/server\s*:\s*\{/.test(next)) {
+        next = next.replace(/server\s*:\s*\{/, "server: {\n    port: 5173,")
+      }
+    }
+    if (!/strictPort\s*:\s*true/.test(next) && /server\s*:\s*\{/.test(next)) {
+      next = next.replace(/server\s*:\s*\{/, "server: {\n    strictPort: true,")
+    }
+    return next
+  }
+
+  return contents
 }
 
 function toSandboxPath(relativePath: string) {

@@ -275,7 +275,7 @@ export function IdeaToLife() {
           </div>
         </div>
 
-        <div className="mt-12 inline-flex max-w-full items-center gap-3 rounded-full border border-[#E9EEF5] bg-white/90 px-5 py-3 shadow-[0_8px_30px_rgba(15,23,42,0.06)] backdrop-blur sm:mt-20 sm:gap-4 sm:px-8 sm:py-4">
+        <div className="mt-12 inline-flex max-w-full items-center gap-3 rounded-sm border border-[#E9EEF5] bg-white/90 px-5 py-3 shadow-[0_8px_30px_rgba(15,23,42,0.06)] backdrop-blur sm:mt-20 sm:gap-4 sm:px-8 sm:py-4">
           <p className="text-center text-[14px] font-medium leading-[1.45] text-[#666666] sm:text-[17px]">
             From a single prompt using{" "}
             <span className="text-[#ff5800]">Zuno</span>

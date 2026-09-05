@@ -6,7 +6,7 @@
 
 **Prompt. Preview. Ship.**
 
-A chat-only AI website builder. Describe a site, get a live Vite + React + TypeScript preview in a sandbox, then iterate in chat, not by editing files yourself.
+A chat-only AI website builder. Clarify in chat, pick React or Next with JS or TS, get a live sandbox preview, then iterate in chat.
 
 [![Live Demo](https://shieldcn.dev/badge/demo-live-FF8162.svg?logo=vercel)](https://zuno-web.vercel.app)
 [![GitHub stars](https://shieldcn.dev/github/stars/ashishxjhaa/Zuno.svg?variant=outline)](https://github.com/ashishxjhaa/Zuno/stargazers)
@@ -42,7 +42,7 @@ A chat-only AI website builder. Describe a site, get a live Vite + React + TypeS
 
 ## Features
 
-- **Prompt to live site**: one sentence is enough. DeepSeek builds a complete Vite + React + TypeScript + Tailwind page
+- **Prompt to live site**: clarify, pick your stack (React/Next, JS/TS), then DeepSeek builds a complete Tailwind site
 - **Live sandbox preview**: the builder iframe is the real E2B Vite URL. You watch the site come together
 - **Chat-only edits**: view the code, change the site by talking. The model uses `readFile`, `writeFile`, `updateFile`, and `deleteFile`
 - **Publish**: keep a preview online. Unpublished projects go idle after 30 minutes and are deleted

@@ -1,38 +1,71 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import {
-  CheckIcon,
-  CopyIcon,
-  FileCode2Icon,
-  FileIcon,
-  FileJsonIcon,
-  FileTextIcon,
-  FileType2Icon,
-  FolderIcon,
-  FolderOpenIcon,
-} from "lucide-react"
+import { CheckIcon, CopyIcon, FileIcon } from "lucide-react"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 import { oneLight } from "react-syntax-highlighter/dist/cjs/styles/prism"
 import { toast } from "sonner"
 import { Button } from "@workspace/ui/components/button"
-import { cn } from "@workspace/ui/lib/utils"
+import {
+  FileTree,
+  type FileTreeItem,
+} from "@workspace/ui/components/file-tree"
 
 export function CodeViewer({ files }: { files: Record<string, string> }) {
-  const paths = useMemo(() => Object.keys(files).sort(), [files])
-  const [activePath, setActivePath] = useState(paths[0] ?? "")
+  const paths = useMemo(() => {
+    const keys = Object.keys(files)
+    const hasApp = keys.some((k) => /^(app|src|components)\//.test(k))
+    return keys
+      .filter((path) => {
+        const parts = path.split("/")
+        const base = parts[parts.length - 1] || path
+        if (parts.some((d) => d === "node_modules" || d === "dist" || d === ".turbo")) return false
+        if (parts.includes(".next") || parts.includes(".git")) return false
+        if (base.startsWith(".env")) return false
+        if (base.startsWith(".") && base.endsWith("ignore")) return false
+        if (base.endsWith(".lock") || base.endsWith("-lock.yaml") || base === "package-lock.json") return false
+        if (base === "README.md" || base === "LICENSE") return false
+        if (base === "components.json") return false
+        if (/^(tsconfig|next\.config|vite\.config|eslint\.config|postcss\.config|tailwind\.config)/.test(base)) return false
+        if (hasApp && !(/^(app|src|components)\//.test(path) || path === "package.json")) return false
+        return true
+      })
+      .sort()
+  }, [files])
+
+  const [activePath, setActivePath] = useState("")
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
+    if (paths.length === 0) {
+      setActivePath("")
+      return
+    }
     if (!paths.includes(activePath)) {
-      setActivePath(paths[0] ?? "")
+      const prefs = [
+        "app/page.tsx",
+        "app/page.jsx",
+        "src/app/page.tsx",
+        "src/App.tsx",
+        "src/App.jsx",
+        "src/main.tsx",
+      ]
+      const hit =
+        prefs.find((x) => paths.includes(x)) ||
+        paths.find((x) => /\.(tsx|jsx)$/.test(x)) ||
+        paths[0] ||
+        ""
+      setActivePath(hit)
     }
   }, [paths, activePath])
 
   const contents = files[activePath] ?? ""
   const language = getLanguage(activePath)
-  const tree = useMemo(() => buildTree(paths), [paths])
-  const openFolders = useMemo(() => getOpenFolders(activePath, tree), [activePath, tree])
+  const tree = useMemo(() => toFileTreeData(buildTree(paths).children), [paths])
+  const openFolders = useMemo(
+    () => ancestorFolders(activePath),
+    [activePath]
+  )
 
   const copy = async () => {
     await navigator.clipboard.writeText(contents)
@@ -43,34 +76,23 @@ export function CodeViewer({ files }: { files: Record<string, string> }) {
 
   return (
     <div className="flex h-full min-h-0">
-      <aside className="no-scrollbar flex w-56 shrink-0 flex-col overflow-y-auto border-r border-border bg-zinc-50">
-        <div className="flex items-center justify-between border-b border-border px-3 py-2">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Explorer
-          </span>
-          <span className="rounded bg-[#ff5800]/10 px-1.5 py-0.5 text-[10px] font-medium text-[#ff5800]">
-            {paths.length}
-          </span>
-        </div>
-        <div className="flex-1 p-2">
-          {tree.children.map((node) => (
-            <TreeNodeItem
-              key={node.path}
-              node={node}
-              depth={0}
-              activePath={activePath}
-              onSelect={setActivePath}
-              openFolders={openFolders}
-            />
-          ))}
-        </div>
+      <aside className="flex w-60 shrink-0 flex-col p-2">
+        <FileTree
+          data={tree}
+          selectedPath={activePath}
+          onFileSelect={setActivePath}
+          defaultOpenPaths={openFolders}
+          className="h-full"
+        />
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col bg-background">
+      <div className="flex min-w-0 flex-1 flex-col border-l border-border bg-background">
         <div className="flex items-center justify-between border-b border-border bg-zinc-50 px-3 py-2">
           <div className="flex items-center gap-2">
-            <FileIconFor path={activePath} className="size-3.5 text-muted-foreground" />
-            <p className="truncate text-xs text-foreground">{activePath || "No file selected"}</p>
+            <FileIcon className="size-3.5 text-muted-foreground" />
+            <p className="truncate font-mono text-xs text-foreground">
+              {activePath || "No file selected"}
+            </p>
           </div>
           <Button type="button" size="xs" variant="outline" onClick={() => void copy()}>
             {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
@@ -142,114 +164,26 @@ function buildTree(paths: string[]): TreeNode {
   return root
 }
 
-function getOpenFolders(activePath: string, tree: TreeNode): Set<string> {
-  const open = new Set<string>()
-  if (!activePath) return open
-
-  function walk(node: TreeNode, pathParts: string[]): boolean {
-    if (node.type === "file") return node.path === activePath
-    let hasActive = false
-    for (const child of node.children) {
-      if (walk(child, [...pathParts, child.name])) {
-        hasActive = true
-      }
-    }
-    if (hasActive && node.path) open.add(node.path)
-    return hasActive
-  }
-
-  walk(tree, [])
-  return open
+function toFileTreeData(nodes: TreeNode[]): FileTreeItem[] {
+  return nodes.map((node) => ({
+    name: node.name,
+    type: node.type,
+    path: node.path,
+    extension: node.type === "file" ? node.name.split(".").pop() : undefined,
+    children: node.type === "folder" ? toFileTreeData(node.children) : undefined,
+  }))
 }
 
-function TreeNodeItem({
-  node,
-  depth,
-  activePath,
-  onSelect,
-  openFolders,
-}: {
-  node: TreeNode
-  depth: number
-  activePath: string
-  onSelect: (path: string) => void
-  openFolders: Set<string>
-}) {
-  const [isOpen, setIsOpen] = useState(() => openFolders.has(node.path) || depth === 0)
-
-  useEffect(() => {
-    if (openFolders.has(node.path)) {
-      setIsOpen(true)
-    }
-  }, [node.path, openFolders])
-
-  const paddingLeft = depth * 12 + 8
-
-  if (node.type === "folder") {
-    return (
-      <div>
-        {depth > 0 && (
-          <button
-            type="button"
-            onClick={() => setIsOpen((prev) => !prev)}
-            className="flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-xs text-muted-foreground transition-colors hover:bg-zinc-200/60"
-            style={{ paddingLeft }}
-          >
-            {isOpen ? (
-              <FolderOpenIcon className="size-3.5 text-[#ff5800]" />
-            ) : (
-              <FolderIcon className="size-3.5 text-[#ff5800]" />
-            )}
-            <span className="truncate">{node.name}</span>
-          </button>
-        )}
-        {isOpen && (
-          <div className="mt-0.5">
-            {node.children.map((child) => (
-              <TreeNodeItem
-                key={child.path}
-                node={child}
-                depth={depth + 1}
-                activePath={activePath}
-                onSelect={onSelect}
-                openFolders={openFolders}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    )
+function ancestorFolders(path: string) {
+  if (!path) return []
+  const parts = path.split("/").filter(Boolean)
+  const folders: string[] = []
+  let built = ""
+  for (let i = 0; i < parts.length - 1; i++) {
+    built = built ? `${built}/${parts[i]}` : parts[i]!
+    folders.push(built)
   }
-
-  const isActive = node.path === activePath
-  return (
-    <button
-      type="button"
-      onClick={() => onSelect(node.path)}
-      className={cn(
-        "flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-xs transition-colors",
-        isActive
-          ? "bg-[#ff5800]/15 text-foreground"
-          : "text-muted-foreground hover:bg-zinc-200/60 hover:text-foreground"
-      )}
-      style={{ paddingLeft }}
-    >
-      <FileIconFor
-        path={node.path}
-        className={cn("size-3.5", isActive ? "text-[#ff5800]" : "text-muted-foreground")}
-      />
-      <span className="truncate">{node.name}</span>
-    </button>
-  )
-}
-
-function FileIconFor({ path, className }: { path: string; className?: string }) {
-  const ext = path.split(".").pop()?.toLowerCase() ?? ""
-  if (ext === "json") return <FileJsonIcon className={className} />
-  if (["ts", "tsx", "js", "jsx"].includes(ext)) return <FileCode2Icon className={className} />
-  if (["md", "txt"].includes(ext)) return <FileTextIcon className={className} />
-  if (["css", "scss", "less"].includes(ext)) return <FileType2Icon className={className} />
-  return <FileIcon className={className} />
+  return folders
 }
 
 function getLanguage(path: string): string {

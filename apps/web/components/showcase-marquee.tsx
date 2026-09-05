@@ -24,7 +24,7 @@ const MASK =
 
 function MarqueeCard({ src }: { src: string }) {
   return (
-    <div className="w-[80vw] max-w-[360px] overflow-hidden rounded-2xl border border-[rgba(15,17,21,0.08)] bg-white sm:w-[500px] sm:max-w-none">
+    <div className="w-[80vw] max-w-[360px] overflow-hidden rounded-sm border border-[rgba(15,17,21,0.08)] bg-white sm:w-[500px] sm:max-w-none">
       <img
         src={src}
         alt=""
@@ -93,7 +93,7 @@ export function ShowcaseMarquee() {
         </h2>
         <div
           aria-hidden
-          className="mx-auto mt-4 h-1 w-12 rounded-full bg-[#ff5800]/80 sm:mt-5"
+          className="mx-auto mt-4 h-1 w-12 rounded-sm bg-[#ff5800]/80 sm:mt-5"
         />
       </div>
 

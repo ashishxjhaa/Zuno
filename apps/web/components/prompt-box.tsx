@@ -69,7 +69,7 @@ export function PromptBox({ variant = "default" }: PromptBoxProps) {
     return (
       <form
         onSubmit={onSubmit}
-        className="relative flex w-full min-w-0 cursor-text flex-col justify-between overflow-visible rounded-[8px] border border-white/70 bg-white/90 text-slate-700 shadow-[0_18px_50px_rgba(0,70,140,0.14)] backdrop-blur min-h-[98px] max-w-[640px] sm:min-h-[106px]"
+        className="relative flex w-full min-w-0 cursor-text flex-col justify-between overflow-visible rounded-sm border border-white/70 bg-white/90 text-slate-700 shadow-[0_18px_50px_rgba(0,70,140,0.14)] backdrop-blur min-h-[98px] max-w-[640px] sm:min-h-[106px]"
       >
         <textarea
           value={value}
@@ -86,13 +86,13 @@ export function PromptBox({ variant = "default" }: PromptBoxProps) {
           <button
             type="submit"
             aria-label="Submit"
-            disabled={isSubmitting}
-            className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[#ff5800]/45 bg-white text-[#ff5800] transition hover:bg-orange-50 active:scale-95 disabled:opacity-60 sm:h-9 sm:w-9"
+            disabled={isSubmitting || !value.trim()}
+            className="inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-sm bg-[#ff5800] text-white hover:bg-[#e04e00] disabled:pointer-events-none disabled:opacity-40 sm:size-9"
           >
             {isSubmitting ? (
               <Loader2Icon className="size-4 animate-spin" />
             ) : (
-              <ArrowUpIcon className="size-4" strokeWidth={2.5} />
+              <ArrowUpIcon className="size-4" />
             )}
           </button>
         </div>

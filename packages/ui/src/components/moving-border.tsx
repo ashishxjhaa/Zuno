@@ -50,7 +50,7 @@ export function Button<T extends ElementType = "button">({
         <MovingBorder duration={duration} rx="14" ry="14">
           <div
             className={cn(
-              "size-2.5 rounded-full bg-[#0ea5e9] opacity-90 shadow-[0_0_8px_2px_#0ea5e9]",
+              "size-2.5 rounded-sm bg-[#0ea5e9] opacity-90 shadow-[0_0_8px_2px_#0ea5e9]",
               borderClassName,
             )}
           />

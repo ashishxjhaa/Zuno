@@ -30,7 +30,7 @@ const GROUPS: FeatureGroup[] = [
         title: "Prompt to a live site",
         steps: [
           "Describe what you want in plain language.",
-          "Get a Vite + React site in one pass.",
+          "Clarify, pick your stack, then ship a live site.",
           "Preview instantly and keep going.",
         ],
         bestFor: "Landings, MVPs, launch drafts",
@@ -172,15 +172,15 @@ function ModeCard({ label, title, steps, bestFor, accent, icon }: FeatureCard) {
   return (
     <article
       className={cn(
-        "flex h-full flex-col rounded-[16px] border border-black/[0.04] bg-white p-6 sm:rounded-[18px] sm:p-7"
+        "flex h-full flex-col rounded-sm border border-black/[0.04] bg-white p-6 sm:rounded-sm sm:p-7"
       )}
     >
       <div
-        className="inline-flex w-fit items-center gap-2 rounded-full px-2.5 py-1 text-[13px] font-medium"
+        className="inline-flex w-fit items-center gap-2 rounded-sm px-2.5 py-1 text-[13px] font-medium"
         style={{ color: accent, backgroundColor: `${accent}18` }}
       >
         <span
-          className="inline-flex size-5 items-center justify-center rounded-md bg-white"
+          className="inline-flex size-5 items-center justify-center rounded-sm bg-white"
           style={{ color: accent }}
         >
           {icon}
@@ -199,7 +199,7 @@ function ModeCard({ label, title, steps, bestFor, accent, icon }: FeatureCard) {
             className="flex gap-3 text-[14px] leading-[1.45] text-[#3f3f46]"
           >
             <span
-              className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
+              className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-[11px] font-semibold"
               style={{ color: accent, backgroundColor: `${accent}18` }}
             >
               {index + 1}
@@ -244,7 +244,7 @@ export function ModernFeatures() {
             <div key={group.heading} className="space-y-4 sm:space-y-5">
               <div className="flex items-center gap-3 px-1">
                 <span
-                  className="inline-flex size-8 items-center justify-center rounded-full text-[13px] font-semibold text-white sm:size-9 sm:text-[14px]"
+                  className="inline-flex size-8 items-center justify-center rounded-sm text-[13px] font-semibold text-white sm:size-9 sm:text-[14px]"
                   style={{ backgroundColor: group.accent }}
                 >
                   {String(groupIndex + 1).padStart(2, "0")}
@@ -259,7 +259,7 @@ export function ModernFeatures() {
                 </h3>
               </div>
               <div
-                className="rounded-[20px] border border-black/[0.04] p-5 sm:rounded-[22px] sm:p-6 lg:p-7"
+                className="rounded-sm border border-black/[0.04] p-5 sm:rounded-sm sm:p-6 lg:p-7"
                 style={{ backgroundColor: group.well }}
               >
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6">

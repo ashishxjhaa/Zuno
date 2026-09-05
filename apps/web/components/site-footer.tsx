@@ -82,7 +82,7 @@ function SocialButton({
       target={href.startsWith("mailto:") ? undefined : "_blank"}
       rel={href.startsWith("mailto:") ? undefined : "noreferrer"}
       aria-label={label}
-      className="inline-flex size-10 items-center justify-center rounded-full border border-zinc-200/90 bg-white text-zinc-600 transition-colors hover:border-[#ff5800]/35 hover:bg-[#ff5800]/5 hover:text-[#ff5800]"
+      className="inline-flex size-10 items-center justify-center rounded-sm border border-zinc-200/90 bg-white text-zinc-600 transition-colors hover:border-[#ff5800]/35 hover:bg-[#ff5800]/5 hover:text-[#ff5800]"
     >
       {children}
     </Link>
@@ -95,7 +95,7 @@ export function SiteFooter() {
   return (
     <footer className="bg-[#FAFAFA]">
       <div className="mx-auto w-full max-w-[80rem] px-5 pt-20 pb-10 sm:px-10 sm:pt-24 sm:pb-12">
-        <div className="rounded-[22px] border border-black/[0.04] bg-white p-8 sm:p-10 lg:p-12">
+        <div className="rounded-sm border border-black/[0.04] bg-white p-8 sm:p-10 lg:p-12">
           <div className="grid grid-cols-1 gap-12 lg:grid-cols-[1.45fr_1fr_1fr_1fr] lg:gap-10">
             <div className="max-w-md">
               <Link href="/" className="inline-flex items-center gap-2.5">
@@ -108,8 +108,7 @@ export function SiteFooter() {
                 {SITE_TAGLINE}
               </p>
               <p className="mt-4 max-w-[34ch] text-[15px] leading-[1.55] text-zinc-500">
-                Turn a prompt into a live Vite + React site, then refine it through
-                chat.
+                Clarify in chat, pick React or Next, build a live site, then refine it through chat.
               </p>
               <div className="mt-7 flex items-center gap-2.5">
                 <SocialButton href={GITHUB_PROFILE_URL} label="GitHub">

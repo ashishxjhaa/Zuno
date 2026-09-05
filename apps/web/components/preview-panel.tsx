@@ -2,15 +2,26 @@
 
 import { useEffect, useRef } from "react"
 
-export function PreviewPanel({ src }: { src: string | null }) {
+export function PreviewPanel({
+  src,
+  onReady,
+}: {
+  src: string | null
+  onReady?: (ready: boolean) => void
+}) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
+  const onReadyRef = useRef(onReady)
+  onReadyRef.current = onReady
 
   useEffect(() => {
-    if (!src) return
+    if (!src) {
+      onReadyRef.current?.(false)
+      return
+    }
+    onReadyRef.current?.(false)
     const iframe = iframeRef.current
     if (!iframe) return
 
-    // Keep scroll position and avoid full reload when the same preview URL is reused.
     const currentSrc = iframe.getAttribute("data-src")
     if (currentSrc === src) return
 
@@ -19,11 +30,7 @@ export function PreviewPanel({ src }: { src: string | null }) {
   }, [src])
 
   if (!src) {
-    return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-        Preview appears after the first build.
-      </div>
-    )
+    return <div className="h-full w-full bg-zinc-50" />
   }
 
   return (
@@ -33,6 +40,7 @@ export function PreviewPanel({ src }: { src: string | null }) {
       className="h-full w-full border-0 bg-transparent"
       sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
       allow="clipboard-write"
+      onLoad={() => onReadyRef.current?.(true)}
     />
   )
 }

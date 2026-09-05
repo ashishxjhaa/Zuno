@@ -25,7 +25,7 @@ function PillNav({
 }) {
   const solid = tone === "solid"
   const navBtn =
-    "inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors"
+    "inline-flex items-center justify-center rounded-sm px-4 py-2 text-sm font-medium transition-colors"
 
   const authLinks = user ? (
     <>
@@ -85,7 +85,7 @@ function PillNav({
     <header className="fixed top-0 right-0 left-0 z-50 flex flex-col items-center px-3 pt-3 sm:px-10 sm:pt-7">
       <nav
         className={cn(
-          "flex w-full max-w-[826px] items-center justify-between gap-3 rounded-full px-4 py-3 backdrop-blur-lg transition-[background-color,border-color,box-shadow,color] duration-200 sm:gap-4 sm:px-5 sm:py-3.5",
+          "flex w-full max-w-[826px] items-center justify-between gap-3 rounded-sm px-4 py-3 backdrop-blur-lg transition-[background-color,border-color,box-shadow,color] duration-200 sm:gap-4 sm:px-5 sm:py-3.5",
           solid
             ? "border border-zinc-200/80 bg-white/95 text-zinc-950 shadow-[0_8px_30px_rgba(15,17,21,0.08)]"
             : "border border-white/20 bg-white/35 text-white shadow-[0_10px_40px_rgba(0,80,150,0.15)]"
@@ -127,7 +127,7 @@ export function SiteHeader({
     return () => window.removeEventListener("scroll", onScroll)
   }, [meadow])
 
-  // Marketing + auth share the same pill nav. Meadow only goes glass over the hero.
+  // Marketing + auth share the same floating nav. Meadow only goes glass over the hero.
   if (!wide) {
     const tone: PillTone = meadow && !scrolled ? "glass" : "solid"
     return (
@@ -140,7 +140,7 @@ export function SiteHeader({
   }
 
   const navBtn =
-    "inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium transition-colors"
+    "inline-flex items-center justify-center rounded-sm px-4 py-2 text-sm font-medium transition-colors"
 
   const authLinks = user ? (
     <>

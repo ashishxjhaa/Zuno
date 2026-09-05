@@ -48,6 +48,7 @@
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
   --font-sans: var(--font-sans);
+  --animate-skeleton-shimmer: skeleton-shimmer 1.35s ease-in-out infinite;
 }
 
 /* Light surface; orange remains the accent. */
@@ -75,7 +76,7 @@
   --chart-3: #a1a1aa;
   --chart-4: #e4e4e7;
   --chart-5: #f4f4f5;
-  --radius: 0.75rem;
+  --radius: 0.25rem;
   --sidebar: #ffffff;
   --sidebar-foreground: #111111;
   --sidebar-primary: #ff5800;
@@ -110,7 +111,7 @@
   --chart-3: #6f6e69;
   --chart-4: #3d3d3a;
   --chart-5: #262624;
-  --radius: 0.75rem;
+  --radius: 0.25rem;
   --sidebar: #1c1c1a;
   --sidebar-foreground: #f4f3ee;
   --sidebar-primary: #ff5800;
@@ -137,20 +138,6 @@
   }
 }
 
-@keyframes zuno-pulse {
-  0%,
-  100% {
-    opacity: 0.72;
-    transform: scale(0.94);
-    filter: drop-shadow(0 0 6px rgb(255 88 0 / 35%));
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.05);
-    filter: drop-shadow(0 0 22px rgb(255 88 0 / 80%));
-  }
-}
-
 @keyframes zuno-draw {
   0% {
     stroke-dashoffset: 80;
@@ -163,13 +150,15 @@
   }
 }
 
-.animate-zuno-pulse {
-  animation: zuno-pulse 1.8s ease-in-out infinite;
-}
-
 .animate-zuno-draw {
   stroke-dasharray: 80;
   animation: zuno-draw 2.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 .no-scrollbar {
