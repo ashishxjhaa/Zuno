@@ -28,9 +28,21 @@ function FlowerPicture({ stem, className, style, loading }: Flower) {
   )
 }
 
-export function HeroSky({ children }: { children: ReactNode }) {
+export function HeroSky({
+  children,
+  compactTop = false,
+}: {
+  children: ReactNode
+  compactTop?: boolean
+}) {
   return (
-    <section className="hero-sky relative mx-auto flex min-h-[clamp(610px,92svh,760px)] w-full items-center justify-center overflow-hidden px-4 pb-[4.5rem] pt-28 sm:min-h-[clamp(720px,85svh,900px)] sm:px-12 sm:py-28">
+    <section
+      className={
+        compactTop
+          ? "hero-sky relative mx-auto flex min-h-[clamp(610px,92svh,760px)] w-full items-center justify-center overflow-hidden px-4 pb-[4.5rem] pt-16 sm:min-h-[clamp(720px,85svh,900px)] sm:px-12 sm:py-20"
+          : "hero-sky relative mx-auto flex min-h-[clamp(610px,92svh,760px)] w-full items-center justify-center overflow-hidden px-4 pb-[4.5rem] pt-28 sm:min-h-[clamp(720px,85svh,900px)] sm:px-12 sm:py-28"
+      }
+    >
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 z-[3] hidden overflow-hidden sm:block"

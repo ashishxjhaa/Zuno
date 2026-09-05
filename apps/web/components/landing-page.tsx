@@ -7,13 +7,17 @@ import { ModernFeatures } from "@/components/modern-features"
 import { ShowcaseMarquee } from "@/components/showcase-marquee"
 import { SiteFooter } from "@/components/site-footer"
 import { SiteHeader } from "@/components/site-header"
+import { useSession } from "@/lib/session"
 
 export function LandingPage() {
+  const { user, isLoading } = useSession()
+  const showNav = !isLoading && !user
+
   return (
     <div className="min-h-screen bg-background">
-      <SiteHeader variant="meadow" />
+      {showNav ? <SiteHeader variant="meadow" /> : null}
 
-      <HeroSky>
+      <HeroSky compactTop={!showNav}>
         <h1
           className="text-center text-white"
           style={{

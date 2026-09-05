@@ -9,7 +9,6 @@ import { ChatPanel, type ChatMessage } from "@/components/chat-panel"
 import { CodeViewer } from "@/components/code-viewer"
 import { GeneratingOverlay } from "@/components/generating-overlay"
 import { PreviewPanel } from "@/components/preview-panel"
-import { SiteHeader } from "@/components/site-header"
 import {
   confirmProjectStack,
   frontend,
@@ -476,17 +475,16 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
 
   return (
     <div className="flex h-screen flex-col bg-background">
-      <SiteHeader wide />
-      <div className="relative flex min-h-0 flex-1 overflow-hidden pt-14">
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
         {/* Chat: full centered in planning, animates to left rail on build */}
         <div
           className={cn(
-            "absolute bottom-0 left-0 top-14 z-10 flex min-h-0 flex-col transition-[width,padding,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
+            "absolute inset-y-0 left-0 z-10 flex min-h-0 flex-col transition-[width,padding,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
             planning
               ? "w-full px-4"
               : cn(
-                  "border-r border-border px-0",
-                  chatCollapsed && "pointer-events-none overflow-hidden border-r-0 opacity-0"
+                  "px-0",
+                  chatCollapsed && "pointer-events-none overflow-hidden opacity-0"
                 )
           )}
           style={{ width: planning ? "100%" : splitChatWidth }}
@@ -501,11 +499,19 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
           </div>
         </div>
 
+        {!planning && !chatCollapsed ? (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 z-30 w-0 border-r border-border"
+            style={{ left: splitChatWidth }}
+          />
+        ) : null}
+
         {/* Preview: slides/fades in from the right (no hard cut) */}
         <section
           aria-hidden={planning}
           className={cn(
-            "absolute bottom-0 right-0 top-14 flex min-h-0 flex-col border-l border-border bg-background transition-[opacity,transform,left] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
+            "absolute inset-y-0 right-0 flex min-h-0 flex-col bg-background transition-[opacity,transform,left] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
             planning
               ? "pointer-events-none translate-x-8 opacity-0"
               : "translate-x-0 opacity-100"

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { SiteHeader } from "@/components/site-header"
+import { Card, CardContent, CardHeader } from "@workspace/ui/components/card"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 
 const CHAT_WIDTH = 380
@@ -16,27 +16,51 @@ export function rememberBuilderPhase(projectId: string, phase: string) {
   }
 }
 
-function ChatThreadSkeleton({ compact }: { compact?: boolean }) {
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className={compact ? "space-y-5 px-3 py-4" : "space-y-6 px-4 py-4"}>
-        <div className="flex justify-end">
-          <Skeleton className="h-10 w-[58%] rounded-sm" />
-        </div>
-        <div className="flex items-start gap-2.5">
-          <Skeleton className="size-[22px] shrink-0 rounded-sm" />
-          <Skeleton className="h-16 w-[72%] rounded-sm" />
-        </div>
-        <div className="flex justify-end">
-          <Skeleton className="h-10 w-[42%] rounded-sm" />
-        </div>
-        <div className="flex items-start gap-2.5">
-          <Skeleton className="size-[22px] shrink-0 rounded-sm" />
-          <Skeleton className="h-20 w-[78%] rounded-sm" />
+function SkeletonAvatarRow({
+  align = "start",
+  wide = false,
+}: {
+  align?: "start" | "end"
+  wide?: boolean
+}) {
+  if (align === "end") {
+    return (
+      <div className="flex justify-end">
+        <div className="space-y-2">
+          <Skeleton className={wide ? "h-4 w-[220px]" : "h-4 w-[160px]"} />
+          <Skeleton className="h-4 w-[120px]" />
         </div>
       </div>
-      <div className={compact ? "mt-auto p-3" : "mt-auto px-0 pb-4"}>
-        <Skeleton className={compact ? "h-12 w-full rounded-sm" : "h-[98px] w-full rounded-sm"} />
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-4">
+      <Skeleton className="size-10 shrink-0 rounded-full" />
+      <div className="space-y-2">
+        <Skeleton className={wide ? "h-4 w-[250px]" : "h-4 w-[180px]"} />
+        <Skeleton className="h-4 w-[200px] max-w-full" />
+      </div>
+    </div>
+  )
+}
+
+function ChatPaneSkeleton({ compact }: { compact?: boolean }) {
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className={compact ? "flex-1 space-y-6 px-4 py-5" : "flex-1 space-y-6 px-4 py-4"}>
+        <SkeletonAvatarRow align="end" wide={!compact} />
+        <SkeletonAvatarRow wide={!compact} />
+        <SkeletonAvatarRow align="end" />
+        <SkeletonAvatarRow />
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-5/6" />
+          <Skeleton className="h-4 w-2/3" />
+        </div>
+      </div>
+      <div className={compact ? "p-3" : "px-0 pb-4"}>
+        <Skeleton className={compact ? "h-12 w-full" : "h-[98px] w-full"} />
       </div>
     </div>
   )
@@ -45,7 +69,7 @@ function ChatThreadSkeleton({ compact }: { compact?: boolean }) {
 function PlanningSkeleton() {
   return (
     <div className="mx-auto flex h-full w-full max-w-2xl flex-col px-4 pt-4">
-      <ChatThreadSkeleton />
+      <ChatPaneSkeleton />
     </div>
   )
 }
@@ -54,27 +78,38 @@ function SplitSkeleton() {
   return (
     <>
       <div
-        className="absolute bottom-0 left-0 top-14 z-10 flex min-h-0 flex-col border-r border-border"
+        className="absolute inset-y-0 left-0 z-10 flex min-h-0 flex-col"
         style={{ width: CHAT_WIDTH }}
       >
-        <ChatThreadSkeleton compact />
+        <ChatPaneSkeleton compact />
       </div>
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 z-30 w-0 border-r border-border"
+        style={{ left: CHAT_WIDTH }}
+      />
       <section
-        className="absolute bottom-0 right-0 top-14 flex min-h-0 flex-col border-l border-border bg-background"
+        className="absolute inset-y-0 right-0 flex min-h-0 flex-col bg-background"
         style={{ left: CHAT_WIDTH }}
       >
         <div className="flex items-center justify-between border-b border-border px-3 py-2">
-          <div className="flex items-center gap-1.5">
-            <Skeleton className="size-8 rounded-sm" />
-            <Skeleton className="h-8 w-[72px] rounded-sm" />
-            <Skeleton className="h-8 w-[60px] rounded-sm" />
+          <div className="flex items-center gap-2">
+            <Skeleton className="size-8" />
+            <Skeleton className="h-8 w-[72px]" />
+            <Skeleton className="h-8 w-[60px]" />
           </div>
-          <Skeleton className="h-8 w-[88px] rounded-sm" />
+          <Skeleton className="h-8 w-[88px]" />
         </div>
-        <div className="relative min-h-0 flex-1">
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Skeleton className="size-24 rounded-sm" />
-          </div>
+        <div className="min-h-0 flex-1 p-4">
+          <Card className="h-full gap-4 py-4">
+            <CardHeader className="px-4">
+              <Skeleton className="h-4 w-2/3" />
+              <Skeleton className="h-4 w-1/2" />
+            </CardHeader>
+            <CardContent className="min-h-0 flex-1 px-4">
+              <Skeleton className="h-full min-h-[240px] w-full" />
+            </CardContent>
+          </Card>
         </div>
       </section>
     </>
@@ -96,8 +131,7 @@ export function BuilderSkeleton({ projectId }: { projectId: string }) {
 
   return (
     <div className="flex h-screen flex-col bg-background">
-      <SiteHeader wide />
-      <div className="relative flex min-h-0 flex-1 overflow-hidden pt-14">
+      <div className="relative min-h-0 flex-1 overflow-hidden">
         {planning ? <PlanningSkeleton /> : <SplitSkeleton />}
       </div>
     </div>
