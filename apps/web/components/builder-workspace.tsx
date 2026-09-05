@@ -2,13 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { CodeXmlIcon, EyeIcon, GlobeIcon, PanelLeftCloseIcon, PanelLeftOpenIcon } from "lucide-react"
+import { GlobeIcon, PanelLeftCloseIcon, PanelLeftOpenIcon } from "lucide-react"
 import { toast } from "sonner"
 import { BuilderSkeleton, rememberBuilderPhase } from "@/components/builder-skeleton"
 import { ChatPanel, type ChatMessage } from "@/components/chat-panel"
 import { CodeViewer } from "@/components/code-viewer"
 import { GeneratingOverlay } from "@/components/generating-overlay"
 import { PreviewPanel } from "@/components/preview-panel"
+import {
+  WorkspacePlaceholder,
+  WorkspaceTabs,
+  type WorkspaceTab,
+} from "@/components/workspace-tabs"
 import {
   confirmProjectStack,
   frontend,
@@ -21,7 +26,6 @@ import { useSession } from "@/lib/session"
 import { buttonVariants } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
 
-const TABS = ["Preview", "Code"] as const
 const CHAT_WIDTH = 380
 const POLL_MS = 2000
 const HEARTBEAT_MS = 30_000
@@ -55,7 +59,7 @@ function toastApiError(error: unknown) {
 export function BuilderWorkspace({ projectId }: { projectId: string }) {
   const router = useRouter()
   const { user, isLoading } = useSession()
-  const [tab, setTab] = useState<(typeof TABS)[number]>("Preview")
+  const [tab, setTab] = useState<WorkspaceTab>("Preview")
   const [project, setProject] = useState<ProjectPayload | null>(null)
   const [seedPrompt, setSeedPrompt] = useState<string | null>(null)
   const [publishing, setPublishing] = useState(false)
@@ -535,31 +539,11 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
                   )}
                 </button>
               ) : null}
-              {TABS.map((item) => {
-                const Icon = item === "Preview" ? EyeIcon : CodeXmlIcon
-                const active = tab === item
-                return (
-                  <button
-                    key={item}
-                    type="button"
-                    disabled={workspaceLocked}
-                    onClick={() => setTab(item)}
-                    className={cn(
-                      "cursor-pointer",
-                      buttonVariants({ size: "sm" }),
-                      "gap-1.5 rounded-sm",
-                      active
-                        ? "bg-primary text-primary-foreground"
-                        : "border-border bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground",
-                      workspaceLocked &&
-                        "pointer-events-none cursor-not-allowed opacity-40 hover:bg-transparent"
-                    )}
-                  >
-                    <Icon className="size-3.5" />
-                    {item}
-                  </button>
-                )
-              })}
+              <WorkspaceTabs
+                value={tab}
+                onChange={setTab}
+                disabled={workspaceLocked}
+              />
             </div>
             <button
               type="button"
@@ -594,6 +578,16 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
               className={cn("absolute inset-0", tab !== "Code" && "hidden")}
             >
               <CodeViewer files={project?.files ?? {}} />
+            </div>
+            <div
+              className={cn("absolute inset-0", tab !== "GitHub" && "hidden")}
+            >
+              <WorkspacePlaceholder tab="GitHub" />
+            </div>
+            <div
+              className={cn("absolute inset-0", tab !== "Download" && "hidden")}
+            >
+              <WorkspacePlaceholder tab="Download" />
             </div>
             {showOverlay ? <GeneratingOverlay /> : null}
           </div>

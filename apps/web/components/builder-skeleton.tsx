@@ -95,8 +95,7 @@ function SplitSkeleton() {
         <div className="flex items-center justify-between border-b border-border px-3 py-2">
           <div className="flex items-center gap-2">
             <Skeleton className="size-8" />
-            <Skeleton className="h-8 w-[72px]" />
-            <Skeleton className="h-8 w-[60px]" />
+            <Skeleton className="h-8 w-[168px] rounded-sm" />
           </div>
           <Skeleton className="h-8 w-[88px]" />
         </div>
