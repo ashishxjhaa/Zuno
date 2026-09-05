@@ -1,6 +1,6 @@
 import { BuilderWorkspace } from "@/components/builder-workspace"
 
-export default async function BuilderPage({
+export default async function ProjectPage({
   params,
 }: {
   params: Promise<{ id: string }>

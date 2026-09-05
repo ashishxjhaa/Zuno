@@ -49,7 +49,7 @@ export function PromptBox({ variant = "default" }: PromptBoxProps) {
         initialPrompt: prompt,
       })
       sessionStorage.setItem(`zuno:prompt:${res.data.id}`, prompt)
-      router.push(`/builder/${res.data.id}`)
+      router.push(`/projects/${res.data.id}`)
     } catch (error: unknown) {
       const data = (error as { response?: { data?: { error?: unknown } } })
         .response?.data

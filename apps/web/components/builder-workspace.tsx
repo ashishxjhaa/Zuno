@@ -376,7 +376,6 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
     )
     try {
       await confirmProjectStack(projectId, framework, language)
-      toast.success("Building with your stack")
       await loadProject()
     } catch (error) {
       setProject((current) =>

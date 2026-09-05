@@ -157,7 +157,7 @@ Zuno/
 | `/` | Public | Landing page |
 | `/signin` | Public | Sign in |
 | `/signup` | Public | Create an account |
-| `/builder/:id` | Required | Preview, code, and chat for a project |
+| `/projects/:id` | Required | Preview, code, and chat for a project |
 
 ## API
 
@@ -175,7 +175,7 @@ Auth is under `/api/v1/auth`. Projects are under `/api/v1/project`. All project 
 | `POST` | `/api/v1/project/:id/heartbeat` | (none) |
 | `POST` | `/api/v1/project/:id/publish` | (none) |
 
-`POST /api/v1/project` returns `{ id }` as soon as the row is inserted. Generation is not awaited. You land on `/builder/{id}` immediately; the overlay stays until the sandbox and DeepSeek finish.
+`POST /api/v1/project` returns `{ id }` as soon as the row is inserted. Generation is not awaited. You land on `/projects/{id}` immediately; the overlay stays until the sandbox and DeepSeek finish.
 
 ## Architecture
 
