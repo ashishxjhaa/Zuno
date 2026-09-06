@@ -1,4 +1,4 @@
-/** Hero flower placements. */
+// Positions for hero flower decorations
 
 export const DESKTOP_FLOWERS = [
   {

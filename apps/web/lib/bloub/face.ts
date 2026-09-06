@@ -1,55 +1,42 @@
 import { clamp, createRng, loopNoise } from './math'
 
-/**
- * Les yeux sont peints sur une sphere, pas poses a plat.
- *
- * Mesure sur la video : l'oeil le plus proche du bord fait 0.69 fois la largeur
- * de l'autre, et son aire 0.663 fois - exactement le facteur de profondeur
- * (z = 0.669) d'un point de sphere a cette distance du centre. On modelise donc
- * une vraie orientation de tete : chaque oeil recupere le repere tangent de la
- * sphere, projete en orthographique. La compression et l'inclinaison en
- * decoulent toutes seules, c'est ce qui donne le volume.
- *
- * Les constantes ci-dessous ne sont pas choisies a la main : elles sortent d'un
- * ajustement du modele sur les positions et tailles relevees image par image
- * (erreur residuelle ~1 px sur un rayon de 190 px).
- */
+// Eyes are drawn on a sphere, not flat on the body
 
 type Vec3 = [number, number, number]
 
-/** Demi-ecart des yeux sur la sphere, en degres (separation totale ~31deg). */
+// Half eye spacing on the sphere, in degrees
 export const EYE_SPLIT = 15.46
-/** Taille de l'oeil au repos, en unites de rayon de boule. */
+// Rest eye size in ball-radius units
 export const EYE_W = 0.186
 export const EYE_H = 0.412
 
-/** Orientation de tete au repos, ajustee sur les frames de reference. */
+// Rest head orientation from reference frames
 export const REST_GAZE: HeadGaze = { yaw: 28.49, pitch: 28.62, roll: -13 }
 
 export interface EyePose {
   x: number
   y: number
-  /** matrice tangente 2x2 : [a b c d] au sens SVG matrix(a,b,c,d,e,f) */
+  // 2x2 tangent matrix as SVG matrix(a,b,c,d,e,f)
   a: number
   b: number
   c: number
   d: number
-  /** composante z de la normale : > 0 = face visible */
+  // Normal z; > 0 means the face is visible
   depth: number
 }
 
 export interface HeadGaze {
-  /** lacet, degres, positif = regarde a droite */
+  // Yaw in degrees; positive looks right
   yaw: number
-  /** tangage, degres, positif = regarde en haut */
+  // Pitch in degrees; positive looks up
   pitch: number
-  /** roulis, degres, inclinaison de la tete */
+  // Roll in degrees; head tilt
   roll: number
 }
 
 const deg = (d: number) => (d * Math.PI) / 180
 
-/** Fait tourner deux vecteurs d'un repere orthonorme dans leur plan commun. */
+// Rotate two orthonormal frame vectors in their shared plane
 function spin(u: Vec3, v: Vec3, angle: number): [Vec3, Vec3] {
   const c = Math.cos(angle)
   const s = Math.sin(angle)
@@ -59,11 +46,7 @@ function spin(u: Vec3, v: Vec3, angle: number): [Vec3, Vec3] {
   ]
 }
 
-/**
- * Repere de la tete puis des deux yeux.
- * Repere ecran : x a droite, y vers le bas, z vers le spectateur.
- * L'indice 0 est l'oeil interieur, l'indice 1 l'oeil exterieur.
- */
+// Head frame then both eye frames (screen coords)
 export function eyePoses(gaze: HeadGaze, scale: number, split = EYE_SPLIT): [EyePose, EyePose] {
   let f: Vec3 = [0, 0, 1]
   let right: Vec3 = [1, 0, 0]
@@ -92,18 +75,12 @@ export function eyePoses(gaze: HeadGaze, scale: number, split = EYE_SPLIT): [Eye
   return [build(-1), build(1)]
 }
 
-/**
- * Vie au repos : derive lente du regard, saccades, clignements.
- *
- * Fonction pure du temps (aucun etat interne), donc pause, reprise et saut a
- * une date arbitraire donnent toujours la meme image. Les valeurs sont des
- * ECARTS a ajouter a la pose de l'etat courant.
- */
+// Idle life: look drift, saccades, blinks as pure time offsets
 export interface Liveliness {
   dYaw: number
   dPitch: number
   dRoll: number
-  /** 1 = oeil ouvert, 0 = ferme (ecrasement vertical en repere ecran) */
+  // 1 = open eye, 0 = closed (vertical squash on screen)
   lid: number
   driftX: number
   driftY: number
@@ -111,7 +88,7 @@ export interface Liveliness {
 }
 
 const BLINK_RNG = createRng(0x5eed)
-/** Calendrier de clignements pre-tire : deterministe et sans etat. */
+// Blink schedule: deterministic, no stored state
 const BLINKS: number[] = (() => {
   const out: number[] = []
   let t = 1.4
@@ -127,7 +104,7 @@ const BLINKS: number[] = (() => {
   return out
 })()
 
-/** Mesure : 1 a 2 frames a 10 fps. */
+// Measured blink length: 1-2 frames at 10 fps
 const BLINK_DUR = 0.18
 
 function blinkLid(t: number): number {
@@ -152,7 +129,7 @@ export interface LivelinessOptions {
 export function liveliness(t: number, opt: LivelinessOptions = {}): Liveliness {
   const { wander = 1, blink = true, float = true } = opt
 
-  // Periodes premieres entre elles : la derive ne se repete jamais a l'oeil.
+  // Coprime periods so look drift does not obviously repeat
   return {
     dYaw: (loopNoise(t, 11.3, 0.4) * 5.5 + loopNoise(t, 3.7, 2.1) * 1.6) * wander,
     dPitch: (loopNoise(t, 9.1, 1.3) * 4.2 + loopNoise(t, 4.3, 0.7) * 1.3) * wander,
@@ -168,12 +145,7 @@ export function liveliness(t: number, opt: LivelinessOptions = {}): Liveliness {
   }
 }
 
-/**
- * Le clignement est un ecrasement VERTICAL en repere ecran autour du centre de
- * l'oeil (mesure : la largeur de bbox est conservee, la hauteur tombe a ~0.35),
- * pas un retrecissement le long de l'axe incline de la gelule. On le compose
- * donc apres la matrice tangente, en n'affectant que les sorties en y.
- */
+// Blink is a vertical screen-space squash, not along the eye axis
 export function blinkScale(lid: number): number {
   return 0.06 + 0.94 * clamp(lid)
 }

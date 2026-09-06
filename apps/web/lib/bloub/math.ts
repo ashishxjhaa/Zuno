@@ -5,19 +5,14 @@ export const lerp = (a: number, b: number, t: number) => a + (b - a) * t
 
 export type Easing = (t: number) => number
 
-/**
- * Mesure sur la video : les transitions sont des ease-out exponentiels, sans
- * depassement du corps. Les seuls effets de ressort sont locaux (le pop de la
- * pastille de notification, l'ouverture des yeux) et sont ecrits directement
- * dans l'etat concerne.
- */
+// Transitions use exponential ease-out with no body overshoot
 export const easings = {
   easeOutCubic: (t: number) => 1 - (1 - t) ** 3,
   easeInOutCubic: (t: number) => (t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2),
   easeOutQuint: (t: number) => 1 - (1 - t) ** 5
 } satisfies Record<string, Easing>
 
-/** Bruit 1D periodique : boucle sans couture sur `period`, utile pour la derive du regard. */
+// Seamless 1D noise over period; used for look drift
 export function loopNoise(t: number, period: number, seed = 0): number {
   const p = (t / period) * TAU
   return (
@@ -27,7 +22,7 @@ export function loopNoise(t: number, period: number, seed = 0): number {
   )
 }
 
-/** PRNG deterministe (mulberry32) : meme sequence a chaque lecture. */
+// Deterministic PRNG (mulberry32)
 export function createRng(seed: number) {
   let a = seed >>> 0
   return () => {
@@ -38,5 +33,5 @@ export function createRng(seed: number) {
   }
 }
 
-/** Arrondi court : divise par ~2 le poids des chaines de path generees a 60 fps. */
+// Short rounding to keep SVG path strings smaller at 60 fps
 export const r2 = (v: number) => Math.round(v * 1000) / 1000

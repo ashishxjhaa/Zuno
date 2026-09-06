@@ -42,7 +42,7 @@ const PENDING_PROMPT_KEY = "zuno:landing-prompt"
 
 type AnimIconHandle = { startAnimation: () => void; stopAnimation: () => void }
 
-/** Drive AnimateIcons hover from the whole row. */
+// Trigger icon hover animations from the whole row
 function RowAnimIcon({
   icon: Icon,
   active,

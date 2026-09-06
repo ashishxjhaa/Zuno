@@ -30,62 +30,70 @@ function getDeepseek() {
   })
 }
 
-/** Pull a trailing ready JSON object from the model reply. */
-export function parseReadyPayload(text: string): ReadyPayload | null {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```\s*$/i)
-  const candidate = fenced?.[1]?.trim() ?? (() => {
-    const start = text.lastIndexOf("{")
-    if (start < 0) return null
-    return text.slice(start).trim()
-  })()
-
-  if (!candidate) return null
-
-  try {
-    const parsed = JSON.parse(candidate) as Record<string, unknown>
-    if (parsed.ready !== true) return null
-    const brief = String(parsed.brief ?? "").trim()
-    if (!brief) {
-      return null
-    }
-    const title =
-      typeof parsed.title === "string" && parsed.title.trim()
-        ? parsed.title.trim().slice(0, 80)
-        : undefined
-    return {
-      ready: true,
-      brief,
-      title,
-    }
-  } catch {
-    return null
-  }
+function readyFromObject(parsed: Record<string, unknown>): ReadyPayload | null {
+  if (parsed.ready !== true) return null
+  const brief = String(parsed.brief ?? "").trim()
+  if (!brief) return null
+  const title =
+    typeof parsed.title === "string" && parsed.title.trim()
+      ? parsed.title.trim().slice(0, 80)
+      : undefined
+  return { ready: true, brief, title }
 }
 
-/** Strip trailing ready JSON (fenced or raw) from user-visible text. */
+// Find the ready JSON block at the end of the model reply
+export function parseReadyPayload(text: string): ReadyPayload | null {
+  const fences = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)]
+  for (let i = fences.length - 1; i >= 0; i--) {
+    const candidate = fences[i]?.[1]?.trim()
+    if (!candidate) continue
+    try {
+      const parsed = readyFromObject(JSON.parse(candidate) as Record<string, unknown>)
+      if (parsed) return parsed
+    } catch {
+      // try the next code block
+    }
+  }
+
+  const readyIdx = text.lastIndexOf('"ready"')
+  if (readyIdx >= 0) {
+    const brace = text.lastIndexOf("{", readyIdx)
+    if (brace >= 0) {
+      const candidate = text.slice(brace).trim()
+      try {
+        const parsed = readyFromObject(JSON.parse(candidate) as Record<string, unknown>)
+        if (parsed) return parsed
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  return null
+}
+
+// Remove the ready JSON block from the chat message
 export function stripReadyMarker(text: string): string {
-  let out = text.replace(/```(?:json)?\s*[\s\S]*?```\s*$/i, "").trim()
-  if (parseReadyPayload(text)) {
-    const start = out.lastIndexOf("{")
-    if (start >= 0) {
-      const maybe = out.slice(start)
+  let out = text.replace(/```(?:json)?\s*[\s\S]*?```/gi, "").trim()
+  const readyIdx = out.lastIndexOf('"ready"')
+  if (readyIdx >= 0) {
+    const brace = out.lastIndexOf("{", readyIdx)
+    if (brace >= 0) {
+      const maybe = out.slice(brace)
       try {
         const parsed = JSON.parse(maybe) as { ready?: unknown }
         if (parsed.ready === true) {
-          out = out.slice(0, start).trim()
+          out = out.slice(0, brace).trim()
         }
       } catch {
-        // keep text
+        out = out.slice(0, brace).trim()
       }
     }
   }
   return out || "Got it. Choose a stack below to start building."
 }
 
-/**
- * Stream intake clarifying replies token-by-token.
- * onToken receives raw model deltas (may include trailing ready JSON during stream).
- */
+// Stream intake replies. onToken may still see ready JSON until we strip it
 export async function runIntakeTurnStreaming(
   projectId: string,
   onToken?: (text: string) => void
@@ -133,7 +141,7 @@ export async function runIntakeTurnStreaming(
   raw = raw.trim() || "Tell me a bit more about what you want to build."
   const ready = parseReadyPayload(raw)
   let visible = ready ? stripReadyMarker(raw) : raw
-  // Keep intake chat tight; technical dumps never belong here.
+  // Cap intake replies at a few sentences
   const sentences = visible.split(/(?<=[.!?])\s+/).filter(Boolean)
   if (sentences.length > 3) {
     visible = sentences.slice(0, 3).join(" ").trim()
@@ -179,7 +187,7 @@ export async function runIntakeTurnStreaming(
   }
 }
 
-/** Non-streaming intake (used as fallback). */
+// Non-streaming intake fallback
 export async function runIntakeTurn(projectId: string) {
   try {
     await runIntakeTurnStreaming(projectId)
@@ -205,7 +213,7 @@ export async function runIntakeTurn(projectId: string) {
   }
 }
 
-/** Confirm stack from UI and start the build once. */
+// Save the stack choice and start the build
 export async function confirmStackAndBuild(
   projectId: string,
   framework: "react" | "nextjs",

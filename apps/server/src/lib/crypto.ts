@@ -8,7 +8,7 @@ function encryptionKey() {
   return createHash("sha256").update(secret).digest()
 }
 
-/** Encrypt a secret for DB storage (AES-256-GCM). Format: v1:iv:tag:ciphertext (base64). */
+// Encrypt a secret for the DB (AES-256-GCM). Stored as v1:iv:tag:ciphertext
 export function encryptSecret(plain: string): string {
   const iv = randomBytes(12)
   const cipher = createCipheriv("aes-256-gcm", encryptionKey(), iv)

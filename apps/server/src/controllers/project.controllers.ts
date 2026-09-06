@@ -543,7 +543,7 @@ export async function restore(req: Request, res: Response) {
   }
 }
 
-/** GET /api/v1/project/:id/download — zip of current source */
+// GET /api/v1/project/:id/download - zip of current source
 export async function downloadProject(req: Request, res: Response) {
   try {
     if (!req.userId) {

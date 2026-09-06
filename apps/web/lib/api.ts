@@ -64,7 +64,7 @@ function parseSseChunk(buffer: string): { events: { event: string; data: string 
   return { events, rest }
 }
 
-/** Stream intake or post-build chat replies over SSE. */
+// Stream intake or post-build chat replies over SSE
 export async function streamConversation(
   projectId: string,
   body: { contents?: string; resume?: boolean },

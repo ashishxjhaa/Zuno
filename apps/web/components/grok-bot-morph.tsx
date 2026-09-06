@@ -11,7 +11,7 @@ const VB = DEMI_VIEWBOX
 const R = RAYON
 const SVG_NS = "http://www.w3.org/2000/svg"
 
-/** Solid brand for dots / particle mixHex */
+// Brand color used for dots and particle mix
 const ZUNO_INK = "#f12711"
 
 function dotFill(dot: DotRender, ink: string, paper: string): string {

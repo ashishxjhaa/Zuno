@@ -7,23 +7,9 @@ import {
   unionOfCirclesProfile
 } from './shape'
 
-/**
- * Formes et couleurs proposees par le personnalisateur du bot.
- *
- * A la difference des silhouettes d'animation (`profiles.ts`), celles-ci ne sont
- * PAS relevees sur la video : elles sont construites analytiquement d'apres la
- * grille du personnalisateur d'origine. Deux sources distinctes, donc, et c'est
- * volontaire - les etats animes doivent rester fideles a la video, les formes de
- * base sont un choix d'utilisateur.
- */
+// Customizer shapes and colors (analytic, not traced from video)
 
-/**
- * Les identifiants sont enumeres plutot que deduits du tableau : c'est ce qui
- * permet a la couche i18n de verifier A LA COMPILATION que chaque forme a bien
- * sa traduction dans les trois langues (`t(\`shapes.${id}\`)` ne compile que si
- * la cle existe). Un `as const` sur le tableau aurait le meme effet mais
- * rendrait `radii` en lecture seule, alors que le moteur le passe tel quel.
- */
+// Shape ids are listed so i18n can verify keys at compile time
 export type ShapeId =
   | 'cercle'
   | 'galet'
@@ -39,7 +25,7 @@ export interface BotShape {
   radii: number[]
 }
 
-/** Ramene le rayon maximal a `max` pour que toutes les formes pesent pareil a l'oeil. */
+// Scale max radius to max so shapes look similar in size
 function normalize(radii: number[], max = 1): number[] {
   const peak = Math.max(...radii)
   if (peak <= 0) return radii
@@ -49,13 +35,13 @@ function normalize(radii: number[], max = 1): number[] {
 
 const ANGLES = Array.from({ length: PROFILE_SAMPLES }, (_, i) => (i / PROFILE_SAMPLES) * Math.PI * 2)
 
-/** Galet : cercle deforme par deux harmoniques basses, donc irregulier mais lisse. */
+// Pebble shape: smooth irregular circle
 const pebble = normalize(
   ANGLES.map((a) => 1 + 0.075 * Math.cos(2 * a + 0.5) + 0.035 * Math.cos(3 * a + 2.1)),
   1.02
 )
 
-/** Nuage : union de bosses, large en bas, deux lobes en haut. */
+// Cloud shape: wide base with two top lobes
 const cloud = normalize(
   unionOfCirclesProfile([
     { x: -0.44, y: 0.2, r: 0.54 },
@@ -67,13 +53,13 @@ const cloud = normalize(
   1.02
 )
 
-/** Goutte : gros disque en bas, pointe effilee en haut. */
+// Drop shape: wide bottom, sharp tip
 const droplet = normalize(
   profileFromPolygon(hullOfCircles(0, 0.28, 0.66, 0, -0.96, 0.05), 0, 0),
   1.04
 )
 
-/** Capsule couchee : enveloppe de deux disques cote a cote. */
+// Sideways capsule from two disks
 const capsule = profileFromPolygon(hullOfCircles(-0.42, 0, 0.62, 0.42, 0, 0.62), 0, 0)
 
 export const SHAPES: BotShape[] = [
@@ -115,7 +101,7 @@ export interface BotColor {
   hex: string
 }
 
-/** Palette du personnalisateur d'origine. */
+// Original customizer color palette
 export const COLORS: BotColor[] = [
   { id: 'encre', hex: '#0a0a0c' },
   { id: 'brun', hex: '#8b5e3c' },
@@ -134,7 +120,7 @@ export const COLORS: BotColor[] = [
 export const COLOR_BY_ID = new Map<string, BotColor>(COLORS.map((c) => [c.id, c]))
 export const DEFAULT_COLOR = 'encre'
 
-/** Melange deux couleurs hex. Sert a la brume de profondeur des particules. */
+// Mix two hex colors for particle depth haze
 export function mixHex(from: string, to: string, t: number): string {
   const parse = (h: string) => {
     const v = parseInt(h.slice(1), 16)

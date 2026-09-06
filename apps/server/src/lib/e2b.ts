@@ -11,7 +11,7 @@ const TEMPLATES_ROOT = path.join(
 )
 const DEV_LOG = "/tmp/zuno-dev-server.log"
 const SNAPSHOT_TAR = "/tmp/zuno-snapshot.tar.gz"
-/** Prefer TCP probe; Next can block HTTP while compiling. */
+// How long to wait for the dev server port (TCP is preferred over HTTP)
 const WAIT_ATTEMPTS = 60
 const WAIT_MS = 250
 
@@ -24,7 +24,7 @@ export type TemplateInfo = {
 export type SandboxBoot = {
   sandbox: Sandbox
   template: TemplateInfo
-  /** True when created from a prebaked E2B template with bun + deps. */
+  // True when the sandbox came from a prebaked template with deps installed
   prebaked: boolean
 }
 
@@ -39,7 +39,7 @@ export function resolveTemplate(
   return { name: `vite-react-${lang}`, kind: "vite", port: 5173 }
 }
 
-/** Env var name for the prebaked E2B template alias for this stack. */
+// Env var name for this stack's prebaked E2B template
 export function e2bTemplateEnvKey(
   framework?: string | null,
   language?: string | null
@@ -52,7 +52,7 @@ export function e2bTemplateEnvKey(
   return "E2B_TEMPLATE_REACT_TS"
 }
 
-/** Resolve prebaked template alias from env, or null if unset. */
+// Read the prebaked template alias from env, or null if unset
 export function resolveE2bTemplateAlias(
   framework?: string | null,
   language?: string | null
@@ -71,7 +71,7 @@ export function getPreviewUrl(sandbox: Sandbox, port: number) {
   return `https://${sandbox.getHost(port)}`
 }
 
-/** Prefer prebaked E2B template; cold path installs deps. */
+// Prefer a prebaked template; otherwise copy files and install deps
 export async function createSandboxWithTemplate(
   framework?: string | null,
   language?: string | null
@@ -147,7 +147,7 @@ async function ensureBun(sandbox: Sandbox) {
 
 async function hasBun(sandbox: Sandbox) {
   try {
-    // E2B command envs do not reliably override PATH, so probe the absolute binary.
+    // E2B may ignore custom PATH, so check the absolute bun binary
     const check = await sandbox.commands.run(
       "test -x /home/user/.bun/bin/bun && /home/user/.bun/bin/bun --version",
       { timeoutMs: 10_000, envs: bunEnv() }
@@ -165,7 +165,7 @@ function bunEnv() {
   }
 }
 
-/** Cold-path only. Prebaked templates already have node_modules. */
+// Install deps only on the slow path. Prebaked templates already have them
 export async function installDependencies(sandbox: Sandbox) {
   console.log(`[install] ${sandbox.sandboxId} cold bun install ...`)
   await ensureBun(sandbox)
@@ -183,7 +183,7 @@ export async function installDependencies(sandbox: Sandbox) {
   }
 }
 
-/** Start package.json dev script; retry once if the port never opens. */
+// Start the package.json dev script; retry once if the port never opens
 export async function startDevServer(
   sandbox: Sandbox,
   port: number,
@@ -222,6 +222,29 @@ export async function startDevServer(
   )
 }
 
+// Hit the local preview and fail if Next/Vite returns an app error page
+export async function smokeLocalPreview(
+  sandbox: Sandbox,
+  port: number
+): Promise<{ ok: boolean; detail: string }> {
+  const script = `node -e "fetch('http://127.0.0.1:${port}/',{headers:{Accept:'text/html'}}).then(async(r)=>{const t=await r.text();const bad=/Application error|Server Error|ReferenceError|is not defined|Element type is invalid|Digest:/i.test(t);if(!r.ok||bad){console.log('FAIL',r.status);console.log(t.slice(0,900));process.exit(1)}console.log('OK',r.status);process.exit(0)}).catch((e)=>{console.log(String(e));process.exit(1)})"`
+  try {
+    const result = await sandbox.commands.run(script, {
+      timeoutMs: 25_000,
+      envs: runtimeEnv(),
+    })
+    const out = `${result.stdout || ""}${result.stderr || ""}`.trim()
+    return { ok: true, detail: out || "ok" }
+  } catch (error) {
+    const err = error as { result?: { stdout?: string; stderr?: string }; message?: string }
+    const out = `${err.result?.stdout || ""}${err.result?.stderr || ""}`.trim()
+    return {
+      ok: false,
+      detail: out || err.message || "preview smoke failed",
+    }
+  }
+}
+
 export async function ensureDevServer(
   sandbox: Sandbox,
   port: number,
@@ -239,22 +262,22 @@ async function resolveDevCommand(
   kind: "vite" | "next"
 ) {
   if (await hasBun(sandbox)) {
-    // Absolute path: E2B drops custom PATH from command envs at runtime.
+    // Use the absolute bun path because E2B drops custom PATH
     return "/home/user/.bun/bin/bun run dev"
   }
-  // Prebaked images sometimes lack bun at runtime even when node_modules exist.
+  // Some prebaked images lack bun even when node_modules exist
   console.warn(
     `[dev] ${sandbox.sandboxId} bun missing; falling back to node ${kind}`
   )
   if (kind === "next") {
-    // Match template scripts: bind 0.0.0.0 so the E2B preview proxy can reach it.
+    // Bind 0.0.0.0 so the E2B preview proxy can reach Next
     return `node ./node_modules/next/dist/bin/next dev --hostname 0.0.0.0 --port ${port}`
   }
   return `node ./node_modules/vite/bin/vite.js --host 0.0.0.0 --port ${port} --strictPort`
 }
 
 function runtimeEnv() {
-  // Keep bun on PATH when present; node lives under /usr/local/bin on E2B base.
+  // Keep bun on PATH when present
   return bunEnv()
 }
 
@@ -306,19 +329,18 @@ async function killPortListener(sandbox: Sandbox, port: number) {
       // ignore
     }
   }
-  // Brief pause so the port is free before relaunch.
+  // Short pause so the port is free before relaunch
   await new Promise((resolve) => setTimeout(resolve, 200))
 }
 
 async function isServerUp(sandbox: Sandbox, port: number) {
-  // Fast TCP check: Next can accept connections while still compiling `/`,
-  // and a full HTTP fetch may hang until compile finishes (blowing the wait budget).
+  // Prefer a quick TCP check. A full HTTP fetch can hang while Next compiles.
   const tcp = `node -e "const n=require('net');const s=n.connect(${port},'127.0.0.1',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1));setTimeout(()=>process.exit(1),1500)"`
   try {
     await sandbox.commands.run(tcp, { timeoutMs: 3_000, envs: runtimeEnv() })
     return true
   } catch {
-    // Fall through to a short HTTP probe (Vite sometimes needs a real request).
+    // Fall back to a short HTTP check (Vite sometimes needs a real request)
   }
   const http = `node -e "const c=new AbortController();setTimeout(()=>c.abort(),1500);fetch('http://127.0.0.1:${port}/',{signal:c.signal}).then(()=>process.exit(0)).catch(()=>process.exit(1))"`
   try {
@@ -338,7 +360,7 @@ async function waitForServer(
     if (await isServerUp(sandbox, port)) {
       return
     }
-    // Surface early crashes instead of waiting the full budget.
+    // Fail fast on early crashes instead of waiting the full timeout
     if (i === 8 || i === 20) {
       const log = await readDevLog(sandbox)
       if (
@@ -377,7 +399,7 @@ export async function listProjectFiles(sandboxId: string) {
   return files
 }
 
-/** Paths only (no content reads). Prefer this for the LLM project file list. */
+// List paths only (no file contents). Best for the model file list
 export async function listProjectPaths(sandboxId: string) {
   const sandbox = await connectSandbox(sandboxId)
   const paths: string[] = []
@@ -464,7 +486,7 @@ export async function writeProjectFile(
   )
 }
 
-/** Batch write: one sandbox round-trip for many files (HMR-friendly first paint). */
+// Write many files in one sandbox call (faster first paint via HMR)
 export async function writeProjectFiles(
   sandbox: Sandbox,
   files: Array<{ path: string; contents: string }>
@@ -487,8 +509,7 @@ export async function updateProjectFile(
   if (!(await sandbox.files.exists(target))) {
     throw new Error(`File not found: ${relativePath}`)
   }
-  // Guard: models sometimes send back only the section they meant to edit.
-  // A verbatim slice of the current file can never be a legit full rewrite.
+  // Reject partial file fragments posed as a full rewrite
   const current = await sandbox.files.read(target)
   const trimmed = contents.trim()
   if (trimmed.length + 64 < current.length && current.includes(trimmed)) {
@@ -503,7 +524,7 @@ export async function updateProjectFile(
   )
 }
 
-/** Replace exact find text; fail if missing or ambiguous. */
+// Replace exact find text; fail if missing or matched more than once
 export async function editProjectFile(
   sandbox: Sandbox,
   relativePath: string,
@@ -548,7 +569,7 @@ export async function readSandboxFile(sandbox: Sandbox, relativePath: string) {
   return sandbox.files.read(toSandboxPath(relativePath))
 }
 
-/** Keep Vite/Next reachable if the LLM rewrites config. */
+// Keep Vite/Next reachable if the model rewrites config
 export function preserveDevServerBind(relativePath: string, contents: string) {
   const normalized = relativePath.replace(/\\/g, "/").replace(/^\/+/, "")
   const base = normalized.split("/").pop() || normalized
@@ -611,7 +632,7 @@ export function preserveDevServerBind(relativePath: string, contents: string) {
 }
 
 
-/** Pack sandbox source into a gzip tarball (excludes deps, builds, caches). */
+// Pack project source into a gzip tarball (skips deps, builds, caches)
 export async function packProjectSnapshot(sandboxId: string): Promise<Uint8Array> {
   const sandbox = await connectSandbox(sandboxId)
   const excludes = [
@@ -637,7 +658,7 @@ export async function packProjectSnapshot(sandboxId: string): Promise<Uint8Array
   return sandbox.files.read(SNAPSHOT_TAR, { format: "bytes" })
 }
 
-/** Extract a snapshot tarball into the sandbox project directory. */
+// Unpack a snapshot tarball into the sandbox project folder
 export async function applyProjectSnapshot(
   sandbox: Sandbox,
   archive: Uint8Array
@@ -649,7 +670,7 @@ export async function applyProjectSnapshot(
     bytes.byteOffset + bytes.byteLength
   ) as ArrayBuffer
   await sandbox.files.write(SNAPSHOT_TAR, ab)
-  // Keep node_modules from the template; replace everything else with the snapshot.
+  // Keep template node_modules; replace the rest from the snapshot
   const extract = await sandbox.commands.run(
     `mkdir -p ${PROJECT_DIR} && cd ${PROJECT_DIR} && find . -mindepth 1 -maxdepth 1 ! -name node_modules -exec rm -rf {} + && tar xzf ${SNAPSHOT_TAR} -C ${PROJECT_DIR} && rm -f ${SNAPSHOT_TAR}`,
     { timeoutMs: 120_000 }

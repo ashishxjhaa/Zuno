@@ -2,26 +2,8 @@ import { EYE_H, EYE_SPLIT, EYE_W, REST_GAZE, type HeadGaze } from './face'
 import { lerp } from './math'
 import type { EyeCfg } from './states'
 
-/**
- * Expression de repos du bot.
- *
- * Le visage ne tient qu'à deux gélules, donc tout se joue sur quatre leviers :
- * l'orientation de la tête, l'écart des yeux, leurs proportions, et
- * l'inclinaison propre de chaque œil. C'est ce dernier qui permet la colère et
- * la tristesse : elles demandent des inclinaisons EN MIROIR (les hauts qui
- * convergent ou divergent), impossible avec le seul roulis de tête qui incline
- * les deux yeux du même côté.
- *
- * Seul l'état de repos porte cette expression. Les états expressifs de la vidéo
- * (clin d'œil, yeux écarquillés, notification) gardent la leur : c'est elle
- * qu'on est venu reproduire.
- *
- * Les amplitudes s'appuient sur bible-strong-avatar-lab, qui expose le même
- * modèle (tête X/Y/Z, largeur et hauteur par œil, écart, angle par œil) : chez
- * eux la largeur va de 0,8 à 2,7 fois le neutre, la hauteur de 0,3 à 1,5, et
- * les angles jusqu'à ±80°. On reste dans cette enveloppe.
- */
-/** Enumeres pour que la couche i18n verifie leurs traductions a la compilation. */
+// Rest expression: eye width, height, open amount, and tilt
+// Listed so i18n can check translations at compile time
 export type ExpressionId =
   | 'neutre'
   | 'attentif'
@@ -47,10 +29,10 @@ export interface BotExpression {
   eyes: [EyeCfg, EyeCfg]
 }
 
-/** `tilt` en degrés, positif = le haut de la gélule part vers la droite. */
+// Eye tilt in degrees; positive tips the top to the right
 const eye = (w: number, h: number, tilt = 0, open = 1): EyeCfg => ({ w, h, tilt, open })
 
-/** Les deux yeux identiques, inclinaisons en miroir si `tilt` est fourni. */
+// Same eyes on both sides; mirror tilt when set
 const pair = (w: number, h: number, tilt = 0, open = 1): [EyeCfg, EyeCfg] => [
   eye(w, h, tilt, open),
   eye(w, h, -tilt, open)
@@ -58,7 +40,7 @@ const pair = (w: number, h: number, tilt = 0, open = 1): [EyeCfg, EyeCfg] => [
 
 export const EXPRESSIONS: BotExpression[] = [
   {
-    // la pose relevée image par image sur la vidéo de référence
+    // Pose traced frame by frame from the reference video
     id: 'neutre',
     gaze: { ...REST_GAZE },
     split: EYE_SPLIT,
@@ -83,7 +65,7 @@ export const EXPRESSIONS: BotExpression[] = [
     eyes: pair(0.4, 0.56, -10)
   },
   {
-    // yeux plissés en arc : les hauts convergent légèrement
+    // Arched squint: tops tip slightly toward the center
     id: 'heureux',
     gaze: { yaw: 5, pitch: 9, roll: 0 },
     split: 17,
@@ -96,7 +78,7 @@ export const EXPRESSIONS: BotExpression[] = [
     eyes: pair(0.34, 0.13, 20)
   },
   {
-    // hauts des yeux qui convergent fort vers le centre + yeux étrécis
+    // Strong inward tip at the tops plus narrowed eyes
     id: 'colere',
     gaze: { yaw: 3, pitch: 7, roll: 0 },
     split: 17,
@@ -116,23 +98,21 @@ export const EXPRESSIONS: BotExpression[] = [
     eyes: pair(0.4, 0.6)
   },
   {
-    // un œil franchement plus fermé que l'autre
+    // One eye clearly more closed than the other
     id: 'mefiant',
     gaze: { yaw: 12, pitch: 6, roll: -6 },
     split: 16,
     eyes: [eye(0.21, 0.4), eye(0.22, 0.15)]
   },
   {
-    // asymétrique sur les deux axes : tailles ET inclinaisons dépareillées.
-    // L'œil plissé est volontairement plat (rapport 1,6) : à un rapport proche
-    // de 1 il serait rond, et son inclinaison ne se verrait pas.
+    // Asymmetric sizes and tilts; squinted eye stays flat so tilt shows
     id: 'confus',
     gaze: { yaw: -14, pitch: 3, roll: 8 },
     split: 16.5,
     eyes: [eye(0.2, 0.44, -18), eye(0.28, 0.17, 14)]
   },
   {
-    // la tête penche : c'est le roulis qui porte la curiosité
+    // Head tips; roll carries the curious look
     id: 'curieux',
     gaze: { yaw: 16, pitch: -9, roll: -15 },
     split: 16.5,
@@ -151,15 +131,14 @@ export const EXPRESSIONS: BotExpression[] = [
     eyes: pair(0.17, 0.3)
   },
   {
-    // fentes horizontales et regard qui part sur le côté
+    // Horizontal slits with a sideways look
     id: 'blase',
     gaze: { yaw: -22, pitch: 2, roll: 0 },
     split: 16,
     eyes: pair(0.3, 0.12)
   },
   {
-    // paupières à moitié tombées : on passe par `open`, donc l'écrasement
-    // vertical à l'écran, le même mécanisme que le clignement
+    // Half-drooped lids via open (same vertical squash as a blink)
     id: 'somnolent',
     gaze: { yaw: 6, pitch: -9, roll: -3 },
     split: 16,
@@ -177,7 +156,7 @@ const lerpEyeCfg = (a: EyeCfg, b: EyeCfg, t: number): EyeCfg => ({
   open: lerp(a.open, b.open, t)
 })
 
-/** Interpolation de deux expressions : le changement se fait en glissant. */
+// Blend two expressions with a smooth slide
 export function blendExpression(a: BotExpression, b: BotExpression, t: number): BotExpression {
   return {
     id: b.id,

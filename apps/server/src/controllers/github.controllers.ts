@@ -39,7 +39,7 @@ function frontendSuccessRedirect(returnTo: string) {
   return target.toString()
 }
 
-/** GET /api/v1/github/oauth/start?returnTo=/projects/... */
+// GET /api/v1/github/oauth/start?returnTo=/projects/...
 export async function oauthStart(req: Request, res: Response) {
   try {
     if (!req.userId) {
@@ -66,7 +66,7 @@ export async function oauthStart(req: Request, res: Response) {
   }
 }
 
-/** GET /api/v1/github/oauth/callback?code=&state= */
+// GET /api/v1/github/oauth/callback?code=&state=
 export async function oauthCallback(req: Request, res: Response) {
   const code = typeof req.query.code === "string" ? req.query.code : ""
   const state = typeof req.query.state === "string" ? req.query.state : ""
@@ -120,7 +120,7 @@ export async function oauthCallback(req: Request, res: Response) {
   }
 }
 
-/** GET /api/v1/github/status */
+// GET /api/v1/github/status
 export async function githubStatus(req: Request, res: Response) {
   try {
     if (!req.userId) {
@@ -151,7 +151,7 @@ export async function githubStatus(req: Request, res: Response) {
   }
 }
 
-/** POST /api/v1/github/disconnect */
+// POST /api/v1/github/disconnect
 export async function githubDisconnect(req: Request, res: Response) {
   try {
     if (!req.userId) {
@@ -173,7 +173,7 @@ export async function githubDisconnect(req: Request, res: Response) {
   }
 }
 
-/** POST /api/v1/project/:id/github/push */
+// POST /api/v1/project/:id/github/push
 export async function pushProjectToGithub(req: Request, res: Response) {
   try {
     if (!req.userId) {

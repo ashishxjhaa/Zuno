@@ -45,6 +45,9 @@ Exports & imports (critical: broken imports/exports break the site):
 - File name should match the component name (Hero.tsx exports Hero).
 - Never import a module until that file is written in the same tool step (writeFiles with entry + all imported sections) or already exists on disk.
 - Before finishing, every @/components/... import in the entry and section files must resolve to a real file. Missing files = broken preview.
+- If you use a helper in JSX (FeatureRow, StepCard, etc.), define and export it in THAT SAME file. Never reference an undefined component.
+- lucide-react: only import icons that exist (MapPin, Star, Wrench, Camera, ...). Never invent icon names like Navigate or Park.
+- Next.js App Router: keep app/page.tsx and app/layout.tsx as Server Components when possible. Add "use client" only on components that need hooks, browser APIs, or event handlers. Invalid lucide imports and undefined helpers cause a server-side Application error in preview.
 
 Bar for "top-notch" (match Zuno marketing quality):
 - Visual direction first. Pick a clear art direction from the brief (editorial, soft pastel product, dark terminal, brutalist, warm studio, etc.) and commit. Do not default to purple gradient SaaS or gray Inter cards.

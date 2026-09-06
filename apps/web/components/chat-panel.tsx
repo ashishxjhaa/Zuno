@@ -244,7 +244,7 @@ function ZunoAvatar({ state }: { state: ZunoMascotState }) {
   )
 }
 
-/** Reveal stream text word-by-word. */
+// Reveal streamed text one word at a time
 function useWordStream(streamingText: string | null) {
   const [displayed, setDisplayed] = useState("")
   const targetRef = useRef("")
@@ -285,6 +285,15 @@ function useWordStream(streamingText: string | null) {
   return displayed
 }
 
+// Remove the ready JSON block from the chat message while streaming
+function stripReadyMarkerLive(text: string): string {
+  const fence = text.search(/```(?:json)?/i)
+  if (fence >= 0) return text.slice(0, fence).trimEnd()
+  const ready = text.search(/{\s*"ready"\s*:\s*true/)
+  if (ready >= 0) return text.slice(0, ready).trimEnd()
+  return text
+}
+
 export function ChatPanel({
   messages,
   cooking,
@@ -293,6 +302,7 @@ export function ChatPanel({
   stackVisible = false,
   stackBusy = false,
   onConfirmStack,
+  centered = false,
   streamingText = null,
 }: {
   messages: ChatMessage[]
@@ -313,7 +323,7 @@ export function ChatPanel({
   const [framework, setFramework] = useState<ProjectFramework>("react")
   const [language, setLanguage] = useState<ProjectLanguage>("typescript")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const displayedStream = useWordStream(streamingText)
+  const displayedStream = useWordStream(streamingText ? stripReadyMarkerLive(streamingText) : null)
 
   useEffect(() => {
     const textarea = textareaRef.current
@@ -329,7 +339,7 @@ export function ChatPanel({
     if (!contents || cooking) {
       return
     }
-    // Clear immediately so the typed text does not linger while the stream runs.
+    // Clear the input right away so the draft does not linger during the stream
     setValue("")
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto"
@@ -337,15 +347,16 @@ export function ChatPanel({
     try {
       await onSend(contents)
     } catch {
-      // parent already toasted; restore draft so the user can retry
+      // Restore the draft after a failed send so the user can retry
       setValue(contents)
     }
   }
 
+  void centered
   const stackDisabled = stackBusy || cooking
   const isStreaming = streamingText !== null
   const showWorking = cooking && !displayedStream
-  const showStack = Boolean(stackVisible && onConfirmStack && !cooking)
+  const showStack = Boolean(stackVisible && onConfirmStack && !stackBusy)
   const mascotState: ZunoMascotState = isStreaming
     ? "streaming"
     : cooking
@@ -516,14 +527,16 @@ export function ChatPanel({
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       {messageList}
-      <div
-        className={cn(
-          "shrink-0",
-          planning ? "px-1 pb-4 pt-2 sm:px-0" : "p-3"
-        )}
-      >
-        {inputForm}
-      </div>
+      {!planning ? (
+        <div
+          className={cn(
+            "shrink-0",
+            planning ? "px-1 pb-4 pt-2 sm:px-0" : "p-3"
+          )}
+        >
+          {inputForm}
+        </div>
+      ) : null}
     </div>
   )
 }

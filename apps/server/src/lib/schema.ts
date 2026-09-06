@@ -44,7 +44,7 @@ export const conversationSchema = z
       .trim()
       .max(8000, "Message is too long")
       .optional(),
-    /** Resume a pending intake/generate turn (e.g. after create). */
+    // Resume a pending intake or generate turn after create
     resume: z.boolean().optional(),
   })
   .superRefine((value, ctx) => {

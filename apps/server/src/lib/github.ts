@@ -107,7 +107,7 @@ export function slugifyRepoName(input: string) {
   return slug || "zuno-project"
 }
 
-/** Safe absolute return path on the frontend (prevents open redirects). */
+// Allow only safe absolute paths on the frontend (blocks open redirects)
 export function sanitizeReturnTo(raw: string | undefined | null) {
   const frontend = (process.env.FRONTEND_URL || "http://localhost:3000").replace(
     /\/$/,
@@ -206,10 +206,7 @@ export async function ensureGithubRepo(
   }
 }
 
-/**
- * Push a full file tree via the Git Data API (no git binary needed).
- * Replaces the tree with the given files (source export from sandbox).
- */
+// Push the full file tree with the Git Data API (no git binary needed)
 export async function pushFilesToRepo(
   octokit: Octokit,
   opts: {

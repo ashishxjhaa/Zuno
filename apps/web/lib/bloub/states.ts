@@ -27,39 +27,34 @@ import {
 } from './shape'
 
 export interface EyeCfg {
-  /** largeur locale (axe court de la gelule), en unites de rayon de boule */
+  // Local eye width in ball-radius units
   w: number
-  /** hauteur locale (axe long) */
+  // Local eye height
   h: number
-  /** 1 = ouvert, 0 = ferme */
+  // 1 = open, 0 = closed
   open: number
-  /**
-   * Inclinaison propre de la gelule, en degres, positif = le haut part a
-   * droite. Appliquee APRES le repere tangent de la sphere. Sans elle, les deux
-   * yeux penchent forcement du meme cote (le roulis de tete) et la colere comme
-   * la tristesse, qui demandent des inclinaisons en miroir, sont hors de portee.
-   */
+  // Per-eye tilt in degrees after the sphere tangent frame
   tilt?: number
 }
 
 export interface Pose {
-  /** silhouette du corps, en unites de rayon de boule */
+  // Body silhouette in ball-radius units
   sil: Silhouette
-  /** decalage global du corps ET des yeux */
+  // Shared offset for body and eyes
   offX: number
   offY: number
   gaze: HeadGaze
-  /** demi-ecart des yeux sur la sphere, en degres */
+  // Half eye spacing on the sphere, in degrees
   split: number
-  /** [oeil interieur, oeil exterieur] */
+  // [inner eye, outer eye]
   eyes: [EyeCfg, EyeCfg]
-  /** opacite des yeux : sert aux etats sans visage */
+  // Eye opacity; used for faceless states
   eyeAlpha: number
   bodyAlpha: number
   dots: DotRender[]
   arcs: ArcSpec[]
   notif: { x: number; y: number; r: number; notch: number } | null
-  /** true = le decor passe derriere le corps (particules de l'eclatement) */
+  // True if decor draws behind the body
   dotsBehind: boolean
 }
 
@@ -86,13 +81,9 @@ function base(over: Partial<Pose> = {}): Pose {
   }
 }
 
-/* --------------------------------------------------- formes non radiales */
+// Non-radial shapes
 
-/**
- * Barre du "!" vertical : enveloppe convexe de deux cercles.
- * Mesure : cercle haut (0, -0.505) r 0.132, cercle bas (0, +0.130) r 0.075,
- * flancs rectilignes. Elle est donc tronconique (rapport haut/bas 1.76).
- */
+// Vertical ! bar: tapered hull of two circles
 const BAR_UPRIGHT_CY = -0.1875
 const BAR_UPRIGHT = profileFromPolygon(
   hullOfCircles(0, -0.505, 0.132, 0, 0.13, 0.075),
@@ -100,7 +91,7 @@ const BAR_UPRIGHT = profileFromPolygon(
   BAR_UPRIGHT_CY
 )
 
-/** Barre du "!" penche : capsule pure (largeur constante 0.269, longueur 0.776). */
+// Tilted ! bar: pure capsule
 const BAR_ITALIC = profileFromPolygon(hullOfCircles(0, -0.2535, 0.1345, 0, 0.2535, 0.1345), 0, 0)
 
 const barUpright = (pose: Partial<Silhouette> = {}): Silhouette => ({
@@ -123,18 +114,10 @@ const barItalic = (pose: Partial<Silhouette> = {}): Silhouette => ({
   ...pose
 })
 
-/**
- * Le point du "!" penche n'est pas un disque : c'est une goutte, bout rond
- * (r 0.118) du cote de la barre et pointe effilee a l'oppose, longueur 0.300
- * dans l'axe du glyphe. Centree sur le barycentre du bout rond.
- */
+// Tilted ! dot is a teardrop, not a disk
 const TEAR = polyPath(hullOfCircles(0, 0, 0.118, 0, 0.172, 0.012))
 
-/**
- * Le triangle ne tourne pas sur lui-meme : son centre decrit un cercle de
- * rayon 0.213 autour de l'origine (mesure). C'est ce decalage qui donne
- * l'impression qu'il bascule au lieu de pivoter sur place.
- */
+// Warning triangle orbits a small circle instead of spinning in place
 const TRI_ORBIT = 0.213
 
 function spinningTriangle(rot: number): Silhouette {
@@ -145,7 +128,7 @@ function spinningTriangle(rot: number): Silhouette {
   })
 }
 
-/* ------------------------------------------------------------------ etats */
+// States
 
 export type StateId =
   | 'idle'
@@ -162,41 +145,27 @@ export type StateId =
   | 'orbit'
   | 'burst'
   | 'comet'
-  /** transition d'interface, pas une animation du catalogue : hors `SEQUENCE` */
+  // UI transition, not a catalog animation (outside SEQUENCE)
   | 'swirl'
 
 export interface StateDef {
   id: StateId
-  /** duree de maintien quand la sequence complete est jouee */
+  // Hold duration when the full sequence plays
   duration: number
-  /**
-   * duree en dessous de laquelle l'animation est coupee avant d'aboutir : le
-   * "!" ne revient pas, le corps reste eclate. Elle se lit dans les constantes
-   * de `pose` ci-dessous, elle ne se choisit pas. Absente = l'etat ignore le
-   * temps ou boucle, n'importe quelle duree lui va (voir `MIN_BLOCK`).
-   */
+  // Cutoff duration below which the animation stops early
   minDuration?: number
-  /** duree du morph d'entree */
+  // Entry morph duration
   morph: number
-  /** true = l'entree est masquee par un clignement, comme dans la video */
+  // True if entry is hidden by a blink
   blinkIn: boolean
-  /**
-   * true = le corps est la silhouette "au repos", donc remplacable par la forme
-   * choisie dans le personnalisateur. Les etats qui dessinent leur propre forme
-   * (le "!", les points, l'oeuf, le triangle...) valent false : c'est cette forme
-   * la qui EST l'animation.
-   */
+  // True if body uses the rest silhouette (customizer can replace it)
   baseBody: boolean
-  /**
-   * true = l'etat porte le visage "au repos", donc remplacable par l'expression
-   * choisie. Seul `idle` : les autres etats a visage ont une expression relevee
-   * sur la video, c'est precisement ce qu'on reproduit.
-   */
+  // True if state uses the rest face (customizer expression applies)
   baseFace: boolean
   pose(local: number): Pose
 }
 
-/** Smooth left-to-right pulse across the three dots (full cosine, no hard drop). */
+// Smooth left-to-right pulse across the three dots
 function dotPulse(t: number, index: number): number {
   const p = ((((t - index * 0.42) / 1.65) % 1) + 1) % 1
   // 0 → 1 → 0 continuously; was a hard cliff at p=0.5 before
@@ -254,8 +223,7 @@ export const STATES: StateDef[] = [
       base({
         gaze: { yaw: -5.37, pitch: 4.55, roll: 6.7 },
         split: 16.25,
-        // L'oeil ferme n'est pas l'oeil ouvert ecrase : c'est un tiret
-        // horizontal PLUS LARGE que l'oeil ouvert (0.447 contre 0.236).
+        // Closed eye is a wider horizontal dash, not a squashed open eye
         eyes: [
           { w: 0.236, h: 0.464, open: 1 },
           { w: 0.447, h: 0.089, open: 1 }
@@ -328,7 +296,7 @@ export const STATES: StateDef[] = [
       const r = NOTIF_R * (p < 1 ? pop : 1)
       const a = (NOTIF_ANGLE * Math.PI) / 180
       return base({
-        // le regard part a l'oppose de la pastille
+        // Look away from the notification badge
         gaze: { yaw: -21.94, pitch: -5.82, roll: -12.2 },
         split: 18.89,
         eyes: pair(0.505, 0.498),
@@ -383,7 +351,7 @@ export const STATES: StateDef[] = [
       base({
         sil: silhouette('egg'),
         gaze: { yaw: 19.97, pitch: 26.01, roll: -17.1 },
-        // les yeux se resserrent comme le corps
+        // Eyes tighten as the body shrinks
         split: 11.07,
         eyes: pair(0.164, 0.385)
       })
@@ -459,14 +427,14 @@ export const STATES: StateDef[] = [
       const fade = clamp(t / 0.8) * clamp((3.6 - t) / 0.9)
       return base({
         sil,
-        // les yeux filent autour de la sphere ~3x plus vite que la silhouette
+        // Eyes orbit the sphere about 3x faster than the body turns
         gaze: {
           yaw: REST_GAZE.yaw + Math.sin(t * 6.5) * 65 * (1 - back),
           pitch: -4 + back * 32,
           roll: -13
         },
         eyes: pair(0.18, 0.34 + back * 0.07),
-        // les anneaux entrent un par un sur 0.8 s
+        // Rings enter one by one over 0.8s
         arcs: RINGS.map((s, i) => ({
           id: `rg${i}`,
           seed: s,
@@ -478,29 +446,9 @@ export const STATES: StateDef[] = [
   },
 
   {
-    /**
-     * Entree dans la vue des reglages.
-     *
-     * SEUL etat qui n'est pas releve sur la video : il est CHOISI, comme la
-     * couleur `--ink`. Il emprunte le vocabulaire d'`orbit` - les memes anneaux,
-     * avec leurs parametres mesures - mais coupe court : 1 s au lieu de 3,4, la
-     * moitie des anneaux, et aucun triangle.
-     *
-     * Les deux drapeaux a `true` sont tout l'interet de cet etat :
-     *
-     * - `baseBody` laisse la forme choisie remplacer le corps, donc la vue peut
-     *   imposer le cercle et le galet ou la goutte y MORPHENT au lieu de sauter ;
-     * - `baseFace` fait porter le visage de repos, donc le suivi du curseur
-     *   s'applique des cette entree. Un etat qui aurait sa propre pose de regard
-     *   (comme `orbit`) rendrait la main a l'etat suivant en pleine course, et
-     *   les yeux sauteraient d'un coup a la reprise.
-     *
-     * Il n'est volontairement PAS dans `SEQUENCE` : ce n'est pas une animation du
-     * catalogue, c'est une transition d'interface.
-     */
+    // Settings-entry transition (not part of SEQUENCE)
     id: 'swirl',
-    // un peu plus que le tour du regard (`TURN_TIME`, 1,1 s) : les yeux doivent
-    // etre poses a gauche avant que les anneaux ne s'effacent
+    // A bit longer than the look turn so eyes settle left before rings fade
     duration: 1.3,
     minDuration: 1.3,
     morph: 0.3,
@@ -510,8 +458,7 @@ export const STATES: StateDef[] = [
     blinkIn: true,
     pose: (t) =>
       base({
-        // trois anneaux sur les six d'`orbit` : la moitie du bouquet suffit a le
-        // reconnaitre, et c'est autant d'arcs en moins a rasteriser par image
+        // Use three of orbit's six rings; half the set is enough and cheaper to draw
         arcs: RINGS.slice(0, 3).map((s, i) => ({
           id: `sw${i}`,
           seed: s,
@@ -548,9 +495,8 @@ export const STATES: StateDef[] = [
   {
     id: 'comet',
     duration: 2.4,
-    // le point se recompose a 1.85 + 0.6 = 2.45, soit 0.05 s apres la coupe de
-    // la video : ce reliquat se termine pendant le fondu suivant, comme dans la
-    // reference. On ne descend donc pas sous la duree mesuree.
+    // Dot rebuild finishes just after the video cut; leftover blends into the next morph
+    // Keep at least the measured reference duration
     minDuration: 2.4,
     morph: 0.45,
     baseFace: false,
@@ -574,12 +520,8 @@ export const STATES: StateDef[] = [
 
 export const STATE_BY_ID = new Map(STATES.map((s) => [s.id, s]))
 
-/** Ordre de lecture de la sequence complete, calque sur la video de reference. */
-/**
- * Date, en temps local, ou chaque etat est le plus lisible : c'est la pose que
- * montrent les vignettes et la planche. Rendu deterministe, donc comparable
- * d'une execution a l'autre. Le type force a couvrir tout nouvel etat.
- */
+// Playback order of the full sequence from the reference video
+// Local time where each state looks best for thumbnails
 export const POSES: Record<StateId, number> = {
   idle: 1,
   thinking: 1.1,
