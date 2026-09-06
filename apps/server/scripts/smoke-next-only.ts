@@ -1,5 +1,5 @@
 /**
- * Live smoke: build one Vite+TS and one Next+TS project, then verify
+ * Live smoke: build one Next+TS project, then verify
  * every @/ import in entry + section files resolves on disk.
  */
 import { prisma } from "../src/lib/prisma"
@@ -161,7 +161,7 @@ async function waitDone(projectId: string, timeoutMs: number) {
   throw new Error(`timeout waiting for ${projectId}`)
 }
 
-async function runOne(userId: string, framework: Framework, language: "javascript" | "typescript") {
+async function runOne(userId: string, framework: Framework, language: "typescript") {
   const label = `${framework}/${language}`
   console.log(`[smoke] creating ${label}`)
   const id = await createSmokeProject(userId, label)
@@ -183,7 +183,7 @@ async function runOne(userId: string, framework: Framework, language: "javascrip
   const missing = await findMissing(done.sandboxId, framework, paths)
   const entry =
     paths.find((p) => isEntryPagePath(p)) ??
-    (framework === "nextjs" ? (language === "javascript" ? "app/page.jsx" : "app/page.tsx") : (language === "javascript" ? "src/App.jsx" : "src/App.tsx"))
+    (framework === "nextjs" ? "app/page.tsx" : "src/App.tsx")
   let entrySnippet = ""
   try {
     entrySnippet = (await readProjectFile(done.sandboxId, entry)).slice(0, 400)
@@ -243,12 +243,12 @@ async function main() {
     console.log("[smoke] fixture detector OK (Next missing Nav)")
   }
 
-  const results = await Promise.all([
-    runOne(user.id, "react", "javascript"),
-    runOne(user.id, "nextjs", "javascript"),
-  ])
+  // Next+TS only (temporary smoke harness).
+  const results = [
+    await runOne(user.id, "nextjs", "typescript"),
+  ]
 
-  console.log("\n===== SMOKE JS RESULTS =====")
+  console.log("\n===== SMOKE RESULTS =====")
   for (const r of results) {
     console.log(JSON.stringify(r, null, 2))
   }
@@ -257,7 +257,7 @@ async function main() {
     console.error(`[smoke] FAILED ${failed.map((f) => f.label).join(", ")}`)
     process.exitCode = 1
   } else {
-    console.log("[smoke] BOTH JS STACKS OK")
+    console.log("[smoke] NEXT STACK OK")
   }
   await prisma.$disconnect()
 }

@@ -8,14 +8,11 @@ import {
   type KeyboardEvent,
 } from "react"
 import { useRouter } from "next/navigation"
-import {
-  ArrowRightIcon,
-  ArrowUpIcon,
-  ChevronDownIcon,
-  DicesIcon,
-  FolderKanbanIcon,
-  Loader2Icon,
-} from "lucide-react"
+import { ArrowRightIcon, ArrowUpIcon, Loader2Icon } from "lucide-react"
+import { ChevronDownIcon } from "@animateicons/react/lucide/chevron-down-icon"
+import { FileCodeIcon } from "@animateicons/react/lucide/file-code-icon"
+import { FolderOpenIcon } from "@animateicons/react/lucide/folder-open-icon"
+import { ShuffleIcon } from "@animateicons/react/lucide/shuffle-icon"
 import { toast } from "sonner"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -32,7 +29,6 @@ import { Textarea } from "@workspace/ui/components/textarea"
 import {
   frontend,
   listProjects,
-  restoreProject,
   type ProjectListItem,
 } from "@/lib/api"
 import { pickLandingIdea } from "@/lib/ideas"
@@ -44,6 +40,40 @@ type PromptBoxProps = {
 
 const PENDING_PROMPT_KEY = "zuno:landing-prompt"
 
+type AnimIconHandle = { startAnimation: () => void; stopAnimation: () => void }
+
+/** AnimateIcons only hover-animate on the SVG node — drive them from the whole row. */
+function RowAnimIcon({
+  icon: Icon,
+  active,
+  size,
+  color,
+  activeColor,
+}: {
+  icon: any
+  active: boolean
+  size: number
+  color: string
+  activeColor?: string
+}) {
+  const ref = useRef<AnimIconHandle>(null)
+  useEffect(() => {
+    const node = ref.current
+    if (!node) return
+    if (active) node.startAnimation()
+    else node.stopAnimation()
+  }, [active])
+  return (
+    <Icon
+      ref={ref}
+      size={size}
+      color={active && activeColor ? activeColor : color}
+      isAnimated={false}
+      className="pointer-events-none shrink-0"
+    />
+  )
+}
+
 export function PromptBox({ variant = "default" }: PromptBoxProps) {
   const router = useRouter()
   const { user, isLoading } = useSession()
@@ -54,6 +84,10 @@ export function PromptBox({ variant = "default" }: PromptBoxProps) {
   const [projects, setProjects] = useState<ProjectListItem[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [restoringId, setRestoringId] = useState<string | null>(null)
+  const [projectsOpen, setProjectsOpen] = useState(false)
+  const [hoverSurprise, setHoverSurprise] = useState(false)
+  const [hoverProjects, setHoverProjects] = useState(false)
+  const [hoverProjectId, setHoverProjectId] = useState<string | null>(null)
   const meadow = variant === "meadow"
   const autoStarted = useRef(false)
 
@@ -128,6 +162,7 @@ export function PromptBox({ variant = "default" }: PromptBoxProps) {
     }
   }
 
+
   const inspire = async () => {
     if (isInspiring || isSubmitting) return
     setIsInspiring(true)
@@ -147,27 +182,16 @@ export function PromptBox({ variant = "default" }: PromptBoxProps) {
     }
   }
 
-  const openProject = async (project: ProjectListItem) => {
+  const openProject = (project: ProjectListItem) => {
     if (restoringId) return
+    // Always navigate first. Restore used to run here and a dead sandbox /
+    // missing snapshot 409'd — so the click looked like it did nothing.
+    setMenuOpen(false)
+    setProjectsOpen(false)
     setRestoringId(project.id)
-    try {
-      if (project.phase === "READY" || project.snapshotAt) {
-        await restoreProject(project.id)
-      }
-      setMenuOpen(false)
-      router.push(`/projects/${project.id}`)
-    } catch (error: unknown) {
-      const data = (error as { response?: { data?: { error?: unknown } } })
-        .response?.data
-      const err = data?.error
-      if (typeof err === "string") {
-        toast.error(err)
-      } else {
-        toast.error("Could not open project")
-      }
-    } finally {
-      setRestoringId(null)
-    }
+    router.push(`/projects/${project.id}`)
+    // restoringId clears on unmount / next interaction; builder restores preview.
+    window.setTimeout(() => setRestoringId(null), 400)
   }
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -189,34 +213,61 @@ export function PromptBox({ variant = "default" }: PromptBoxProps) {
       open={menuOpen}
       onOpenChange={(open) => {
         setMenuOpen(open)
-        if (open && user) {
-          void loadProjects()
+        if (!open) {
+          setProjectsOpen(false)
+          setHoverSurprise(false)
+          setHoverProjects(false)
+          setHoverProjectId(null)
         }
+        if (open && user) void loadProjects()
       }}
     >
       <DropdownMenuTrigger
         disabled={busy}
+        openOnHover
+        delay={80}
+        closeDelay={120}
         aria-label="Quick actions"
+        onMouseEnter={() => setHoverSurprise(true)}
+        onMouseLeave={() => setHoverSurprise(false)}
         className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-sm border border-[#ff5800] bg-transparent px-2.5 text-[13px] font-medium text-[#ff5800] transition-colors hover:bg-[#ff5800]/10 disabled:pointer-events-none disabled:opacity-40 sm:h-9 sm:px-3"
       >
         {isInspiring ? (
           <Loader2Icon className="size-3.5 animate-spin" />
         ) : (
-          <DicesIcon className="size-3.5" />
+          <RowAnimIcon
+            icon={ShuffleIcon}
+            active={menuOpen || hoverSurprise}
+            size={14}
+            color="#ff5800"
+          />
         )}
         <span>Surprise me</span>
-        <ChevronDownIcon className="size-3.5 opacity-70" />
+        <RowAnimIcon
+          icon={ChevronDownIcon}
+          active={menuOpen}
+          size={14}
+          color="#ff5800"
+        />
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"
+        side="bottom"
         sideOffset={8}
         className="min-w-[220px] rounded-sm border border-slate-200 bg-white p-1 text-slate-800 shadow-[0_12px_40px_rgba(0,0,0,0.12)]"
       >
         <DropdownMenuItem
           className="cursor-pointer gap-2 rounded-sm px-2.5 py-2"
           onClick={() => void inspire()}
+          onMouseEnter={() => setHoverSurprise(true)}
+          onMouseLeave={() => setHoverSurprise(false)}
         >
-          <DicesIcon className="size-4 text-[#ff5800]" />
+          <RowAnimIcon
+            icon={ShuffleIcon}
+            active={hoverSurprise}
+            size={16}
+            color="#ff5800"
+          />
           <span className="flex min-w-0 flex-col">
             <span className="text-sm font-medium">Surprise me</span>
             <span className="text-[12px] text-slate-500">
@@ -225,14 +276,32 @@ export function PromptBox({ variant = "default" }: PromptBoxProps) {
           </span>
         </DropdownMenuItem>
 
-        <DropdownMenuSub>
+        <DropdownMenuSub
+          open={projectsOpen}
+          onOpenChange={(open) => {
+            setProjectsOpen(open)
+            if (!open) setHoverProjects(false)
+            if (open && user) void loadProjects()
+          }}
+        >
           <DropdownMenuSubTrigger
+            openOnHover
+            delay={60}
+            closeDelay={140}
             className="cursor-pointer gap-2 rounded-sm px-2.5 py-2"
             onMouseEnter={() => {
+              setHoverProjects(true)
+              setProjectsOpen(true)
               if (user) void loadProjects()
             }}
+            onMouseLeave={() => setHoverProjects(false)}
           >
-            <FolderKanbanIcon className="size-4 text-slate-600" />
+            <RowAnimIcon
+              icon={FolderOpenIcon}
+              active={hoverProjects || projectsOpen}
+              size={16}
+              color="#475569"
+            />
             <span className="flex min-w-0 flex-col">
               <span className="text-sm font-medium">My projects</span>
               <span className="text-[12px] text-slate-500">
@@ -241,19 +310,19 @@ export function PromptBox({ variant = "default" }: PromptBoxProps) {
             </span>
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent
-            align="start"
-            alignOffset={0}
             side="right"
+            align="start"
+            alignOffset={-4}
             sideOffset={6}
             sticky
-            collisionAvoidance={{ side: "none", align: "none", fallbackAxisSide: "none" }}
-            className="min-w-[240px] !w-auto rounded-sm border border-slate-200 bg-white p-1 shadow-[0_12px_40px_rgba(0,0,0,0.12)]"
+            className="min-w-[240px] max-h-[min(360px,70vh)] overflow-y-auto rounded-sm border border-slate-200 bg-white p-1 shadow-[0_12px_40px_rgba(0,0,0,0.12)]"
           >
             {!user ? (
               <DropdownMenuItem
                 className="cursor-pointer rounded-sm px-2.5 py-2"
                 onClick={() => {
                   setMenuOpen(false)
+                  setProjectsOpen(false)
                   router.push("/signin")
                 }}
               >
@@ -277,8 +346,20 @@ export function PromptBox({ variant = "default" }: PromptBoxProps) {
                   className="cursor-pointer gap-2 rounded-sm px-2.5 py-2"
                   disabled={Boolean(restoringId)}
                   onClick={() => void openProject(project)}
+                  onMouseEnter={() => setHoverProjectId(project.id)}
+                  onMouseLeave={() =>
+                    setHoverProjectId((id) =>
+                      id === project.id ? null : id
+                    )
+                  }
                 >
-                  <FolderKanbanIcon className="size-4 shrink-0 text-slate-500" />
+                  <RowAnimIcon
+                    icon={FileCodeIcon}
+                    active={hoverProjectId === project.id}
+                    size={16}
+                    color="#334155"
+                    activeColor="#ff5800"
+                  />
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">
                     {project.title || "Untitled project"}
                   </span>

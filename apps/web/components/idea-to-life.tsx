@@ -1,4 +1,7 @@
-import type { CSSProperties } from "react"
+"use client"
+
+import { useEffect, useRef, type CSSProperties, type ReactNode } from "react"
+import { cn } from "@workspace/ui/lib/utils"
 
 type SideFlower = {
   stem: string
@@ -72,28 +75,272 @@ function SideFlowerPicture({ stem, className, style }: SideFlower) {
   )
 }
 
+function LandingArt() {
+  return (
+    <div className="flex h-full flex-col gap-1.5 p-2.5">
+      <div className="flex items-center justify-between">
+        <span className="h-2 w-10 rounded-full bg-[#ff5800]/35" />
+        <div className="flex gap-1">
+          <span className="h-1.5 w-5 rounded-full bg-[#E8EDF4]" />
+          <span className="h-1.5 w-5 rounded-full bg-[#E8EDF4]" />
+          <span className="h-1.5 w-6 rounded-full bg-[#ff5800]/55" />
+        </div>
+      </div>
+      <div className="mt-1 space-y-1.5">
+        <div className="h-2.5 w-[72%] rounded-full bg-[#2d2d2d]/80" />
+        <div className="h-2 w-[48%] rounded-full bg-[#C5CCD8]" />
+      </div>
+      <div className="mt-auto grid flex-1 grid-cols-3 gap-1.5 pt-2">
+        <div className="rounded-sm bg-[#FFF1E8]" />
+        <div className="rounded-sm bg-[#FFE4D1]" />
+        <div className="rounded-sm bg-[#ff5800]/20" />
+      </div>
+    </div>
+  )
+}
+
+function AppArt() {
+  return (
+    <div className="flex h-full gap-1.5 p-2.5">
+      <div className="flex w-[22%] flex-col gap-1.5 rounded-sm bg-[#F4F6FA] p-1.5">
+        <span className="h-1.5 w-full rounded-full bg-[#D7DEEA]" />
+        <span className="h-1.5 w-[80%] rounded-full bg-[#7C5CFC]/55" />
+        <span className="h-1.5 w-[70%] rounded-full bg-[#D7DEEA]" />
+        <span className="mt-auto h-1.5 w-[60%] rounded-full bg-[#D7DEEA]" />
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <span className="h-2 w-16 rounded-full bg-[#2d2d2d]/75" />
+          <span className="h-4 w-10 rounded-sm bg-[#7C5CFC]/80" />
+        </div>
+        <div className="grid flex-1 grid-cols-2 gap-1.5">
+          <div className="rounded-sm border border-[#EEF2F7] bg-white p-1.5">
+            <div className="h-1.5 w-[70%] rounded-full bg-[#C5CCD8]" />
+            <div className="mt-2 h-6 rounded-sm bg-[#E8EDF4]" />
+          </div>
+          <div className="rounded-sm border border-[#EEF2F7] bg-white p-1.5">
+            <div className="h-1.5 w-[60%] rounded-full bg-[#C5CCD8]" />
+            <div className="mt-2 h-6 rounded-sm bg-[#EDE4FF]" />
+          </div>
+          <div className="col-span-2 rounded-sm border border-[#EEF2F7] bg-[#FAFBFC] p-1.5">
+            <div className="flex gap-1">
+              <span className="h-5 flex-1 rounded-sm bg-[#E8EDF4]" />
+              <span className="h-5 w-8 rounded-sm bg-[#7C5CFC]/25" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MarketingArt() {
+  return (
+    <div className="flex h-full flex-col gap-1.5 p-2.5">
+      <div className="relative flex flex-1 flex-col justify-end overflow-hidden rounded-sm bg-gradient-to-br from-[#FFE8D4] via-[#FFF6EF] to-[#E8F0FF] p-2.5">
+        <div
+          aria-hidden
+          className="absolute -right-3 -top-3 size-14 rounded-full bg-[#E67E22]/20"
+        />
+        <div
+          aria-hidden
+          className="absolute bottom-2 right-3 size-8 rounded-full bg-[#0EA5E9]/20"
+        />
+        <div className="relative space-y-1.5">
+          <div className="h-2.5 w-[65%] rounded-full bg-[#2d2d2d]/80" />
+          <div className="h-1.5 w-[80%] rounded-full bg-[#2d2d2d]/25" />
+          <div className="h-1.5 w-[55%] rounded-full bg-[#2d2d2d]/20" />
+          <div className="mt-2 h-5 w-16 rounded-sm bg-[#E67E22]" />
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-1">
+        <span className="h-4 rounded-sm bg-[#F4F6FA]" />
+        <span className="h-4 rounded-sm bg-[#F4F6FA]" />
+        <span className="h-4 rounded-sm bg-[#F4F6FA]" />
+      </div>
+    </div>
+  )
+}
+
+type BentoCard = {
+  label: string
+  title: string
+  blurb: string
+  accent: string
+  well: string
+  Art: () => ReactNode
+  icon: ReactNode
+}
+
+const CARDS: BentoCard[] = [
+  {
+    label: "Landing",
+    title: "Landing pages",
+    blurb: "Hero, proof, and a clear CTA — ready to ship from one prompt.",
+    accent: "#ff5800",
+    well: "#FFF1E8",
+    Art: LandingArt,
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" className="size-3.5" aria-hidden>
+        <path
+          d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5v-11Z"
+          stroke="currentColor"
+          strokeWidth="1.8"
+        />
+        <path d="M4 9h16M9 9v11" stroke="currentColor" strokeWidth="1.8" />
+      </svg>
+    ),
+  },
+  {
+    label: "Apps",
+    title: "Full-stack apps",
+    blurb: "Dashboards, auth flows, and live data — preview as you chat.",
+    accent: "#7C5CFC",
+    well: "#EDE4FF",
+    Art: AppArt,
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" className="size-3.5" aria-hidden>
+        <rect x="3" y="5" width="11" height="14" rx="2" stroke="currentColor" strokeWidth="1.8" />
+        <rect x="16" y="8" width="5" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+      </svg>
+    ),
+  },
+  {
+    label: "Marketing",
+    title: "Marketing sites",
+    blurb: "Campaign pages that convert — hierarchy and polish built in.",
+    accent: "#E67E22",
+    well: "#FFE8CC",
+    Art: MarketingArt,
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" className="size-3.5" aria-hidden>
+        <path
+          d="M4 19V5M4 19h16M8 15l3-4 3 2 4-6"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    ),
+  },
+]
+
+function BentoCardItem({
+  label,
+  title,
+  blurb,
+  accent,
+  well,
+  Art,
+  icon,
+  index,
+}: BentoCard & { index: number }) {
+  return (
+    <article
+      className={cn(
+        "group relative flex h-full flex-col overflow-hidden rounded-sm border border-black/[0.04] bg-white p-3 transition-colors duration-300 ease-out sm:p-3.5",
+        "hover:border-black/[0.07] hover:shadow-[0_10px_28px_rgba(15,23,42,0.06)]"
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div
+          className="inline-flex w-fit items-center gap-1.5 rounded-sm px-2 py-0.5 text-[12px] font-medium"
+          style={{ color: accent, backgroundColor: `${accent}18` }}
+        >
+          <span
+            className="inline-flex size-5 items-center justify-center rounded-sm bg-white"
+            style={{ color: accent }}
+          >
+            {icon}
+          </span>
+          {label}
+        </div>
+        <span
+          className="inline-flex size-6 shrink-0 items-center justify-center rounded-sm text-[10px] font-semibold"
+          style={{ color: accent, backgroundColor: `${accent}14` }}
+        >
+          {String(index + 1).padStart(2, "0")}
+        </span>
+      </div>
+
+      <h3 className="mt-2.5 text-left text-[15px] font-semibold leading-[1.2] tracking-[-0.02em] text-[#171717] sm:text-[16px]">
+        {title}
+      </h3>
+      <p className="mt-1 text-left text-[12px] leading-[1.4] text-[#71717a]">
+        {blurb}
+      </p>
+
+      <div
+        className="mt-3 aspect-[16/9] overflow-hidden rounded-sm border border-black/[0.04]"
+        style={{ backgroundColor: well }}
+      >
+        <Art />
+      </div>
+    </article>
+  )
+}
+
+
 export function IdeaToLife() {
   return (
     <section className="relative w-full overflow-hidden bg-white px-5 pb-44 pt-24 text-[#111111] sm:px-10 sm:pb-48 sm:pt-32">
+      {/* Soft 7-band ROYGBIV rainbow arc */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10"
-        style={{
-          background:
-            "radial-gradient(60% 50% at 50% 30%, rgba(255,88,0,0.08) 0%, rgba(255,255,255,0) 70%)",
-        }}
-      />
+        className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
+      >
+        <svg
+          className="absolute inset-0 h-full w-full"
+          viewBox="0 0 1000 700"
+          preserveAspectRatio="none"
+          fill="none"
+        >
+          <defs>
+            <filter
+              id="zuno-rainbow-soft"
+              x="-30%"
+              y="-30%"
+              width="160%"
+              height="160%"
+            >
+              <feGaussianBlur stdDeviation="8" />
+            </filter>
+          </defs>
+          {(
+            [
+              { d: "M -120 720 C 140 500, 380 290, 1120 40", color: "#ff2d2d" },
+              { d: "M -100 675 C 155 460, 395 255, 1100 20", color: "#ff8a00" },
+              { d: "M -80 630 C 170 420, 410 220, 1080 0", color: "#ffd400" },
+              { d: "M -60 585 C 185 380, 425 185, 1060 -20", color: "#3ddc84" },
+              { d: "M -40 540 C 200 340, 440 150, 1040 -40", color: "#2f9bff" },
+              { d: "M -20 495 C 215 300, 455 115, 1020 -60", color: "#5b4dff" },
+              { d: "M 0 450 C 230 260, 470 80, 1000 -80", color: "#b44dff" },
+            ] as const
+          ).map((band) => (
+            <path
+              key={band.color}
+              d={band.d}
+              stroke={band.color}
+              strokeWidth="36"
+              strokeLinecap="round"
+              opacity="0.4"
+              filter="url(#zuno-rainbow-soft)"
+            />
+          ))}
+        </svg>
+      </div>
 
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 z-0 h-full overflow-hidden"
+        className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-full overflow-hidden"
       >
         {SIDE_FLOWERS.map((flower) => (
           <SideFlowerPicture key={flower.stem + flower.className} {...flower} />
         ))}
       </div>
 
-      <div className="relative z-10 mx-auto flex max-w-[860px] flex-col items-center text-center">
+      <div className="relative z-10 mx-auto flex max-w-[920px] flex-col items-center text-center">
         <h2
           className="mt-4 text-[30px] leading-[1.15] text-[#2d2d2d] sm:text-[44px]"
           style={{
@@ -105,182 +352,14 @@ export function IdeaToLife() {
           to bring an idea to life.
         </h2>
 
-        <div className="mt-14 grid w-full max-w-[820px] grid-cols-3 gap-3 sm:mt-20 sm:grid-cols-[1fr_auto_1fr_auto_1fr] sm:items-center sm:gap-x-4">
-          <div className="flex min-w-0 flex-col items-center gap-3 px-1 py-2 sm:gap-4 sm:px-0 sm:py-0">
-            <svg
-              viewBox="0 0 64 64"
-              fill="none"
-              aria-hidden
-              className="h-12 w-12 text-[#ff5800] sm:h-20 sm:w-20"
-            >
-              <rect
-                x="6"
-                y="10"
-                width="52"
-                height="44"
-                rx="4"
-                stroke="currentColor"
-                strokeWidth="2.5"
-              />
-              <path d="M6 20 L58 20" stroke="currentColor" strokeWidth="2.5" />
-              <circle cx="11" cy="15" r="1.2" fill="currentColor" />
-              <circle cx="15.5" cy="15" r="1.2" fill="currentColor" />
-              <circle cx="20" cy="15" r="1.2" fill="currentColor" />
-              <rect
-                x="12"
-                y="26"
-                width="20"
-                height="3"
-                rx="1.5"
-                fill="currentColor"
-                opacity="0.35"
-              />
-              <rect
-                x="12"
-                y="33"
-                width="14"
-                height="14"
-                rx="2"
-                fill="currentColor"
-                opacity="0.25"
-              />
-              <rect
-                x="30"
-                y="33"
-                width="22"
-                height="6"
-                rx="1.5"
-                fill="currentColor"
-                opacity="0.25"
-              />
-              <rect
-                x="30"
-                y="42"
-                width="22"
-                height="5"
-                rx="1.5"
-                fill="currentColor"
-                opacity="0.25"
-              />
-            </svg>
-            <span className="text-center text-[13px] font-medium leading-[1.15] text-[#202020] sm:text-[19px]">
-              Landing pages
-            </span>
-          </div>
-
-          <span
-            aria-hidden
-            className="hidden h-20 w-px bg-[#E9EEF5] sm:block"
-          />
-
-          <div className="flex min-w-0 flex-col items-center gap-3 px-1 py-2 sm:gap-4 sm:px-0 sm:py-0">
-            <svg
-              viewBox="0 0 64 64"
-              fill="none"
-              aria-hidden
-              className="h-12 w-12 text-[#ff5800] sm:h-20 sm:w-20"
-            >
-              <rect
-                x="10"
-                y="8"
-                width="44"
-                height="48"
-                rx="4"
-                stroke="currentColor"
-                strokeWidth="2.5"
-              />
-              <path
-                d="M20 22h24M20 30h18M20 38h20"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-              />
-              <circle cx="44" cy="46" r="4" fill="currentColor" opacity="0.35" />
-            </svg>
-            <span className="text-center text-[13px] font-medium leading-[1.15] text-[#202020] sm:text-[19px]">
-              Full-stack apps
-            </span>
-          </div>
-
-          <span
-            aria-hidden
-            className="hidden h-20 w-px bg-[#E9EEF5] sm:block"
-          />
-
-          <div className="flex min-w-0 flex-col items-center gap-3 px-1 py-2 sm:gap-4 sm:px-0 sm:py-0">
-            <svg
-              viewBox="0 0 64 64"
-              fill="none"
-              aria-hidden
-              className="h-12 w-12 text-[#ff5800] sm:h-20 sm:w-20"
-            >
-              <rect
-                x="4"
-                y="14"
-                width="56"
-                height="36"
-                rx="4"
-                stroke="currentColor"
-                strokeWidth="2.5"
-              />
-              <rect
-                x="10"
-                y="20"
-                width="20"
-                height="24"
-                rx="2"
-                fill="currentColor"
-                opacity="0.18"
-              />
-              <rect
-                x="36"
-                y="20"
-                width="18"
-                height="4"
-                rx="2"
-                fill="currentColor"
-                opacity="0.5"
-              />
-              <rect
-                x="36"
-                y="28"
-                width="13"
-                height="3"
-                rx="1.5"
-                fill="currentColor"
-                opacity="0.3"
-              />
-              <rect
-                x="36"
-                y="35"
-                width="10"
-                height="3"
-                rx="1.5"
-                fill="currentColor"
-                opacity="0.3"
-              />
-              <rect
-                x="36"
-                y="42"
-                width="14"
-                height="5"
-                rx="2"
-                fill="currentColor"
-                opacity="0.45"
-              />
-            </svg>
-            <span className="text-center text-[13px] font-medium leading-[1.15] text-[#202020] sm:text-[19px]">
-              Marketing sites
-            </span>
+        <div className="mt-12 w-full rounded-sm border border-black/[0.04] bg-[#F7F5F2]/80 p-3 sm:mt-16 sm:p-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-3">
+            {CARDS.map((card, index) => (
+              <BentoCardItem key={card.label} {...card} index={index} />
+            ))}
           </div>
         </div>
 
-        <div className="mt-12 inline-flex max-w-full items-center gap-3 rounded-sm border border-[#E9EEF5] bg-white/90 px-5 py-3 shadow-[0_8px_30px_rgba(15,23,42,0.06)] backdrop-blur sm:mt-20 sm:gap-4 sm:px-8 sm:py-4">
-          <p className="text-center text-[14px] font-medium leading-[1.45] text-[#666666] sm:text-[17px]">
-            From a single prompt using{" "}
-            <span className="text-[#ff5800]">Zuno</span>
-          </p>
-        </div>
       </div>
     </section>
   )

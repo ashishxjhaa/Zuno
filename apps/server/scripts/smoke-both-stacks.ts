@@ -116,6 +116,7 @@ async function createSmokeProject(userId: string, label: string) {
 
 async function waitDone(projectId: string, timeoutMs: number) {
   const start = Date.now()
+  let previewAtMs: number | null = null
   while (Date.now() - start < timeoutMs) {
     const p = await prisma.project.findUnique({
       where: { id: projectId },
@@ -129,6 +130,10 @@ async function waitDone(projectId: string, timeoutMs: number) {
       },
     })
     if (!p) throw new Error(`project ${projectId} vanished`)
+    if (p.previewUrl && previewAtMs === null) {
+      previewAtMs = Date.now() - start
+      console.log(`[smoke] ${projectId} previewUrl ready in ${previewAtMs}ms`)
+    }
     if (!p.isGenerating && (p.phase === "READY" || p.sandboxId)) {
       // allow brief settle after isGenerating flips
       await Bun.sleep(1500)
@@ -143,9 +148,15 @@ async function waitDone(projectId: string, timeoutMs: number) {
           language: true,
         },
       })
-      if (again && !again.isGenerating) return again
+      if (again && !again.isGenerating) {
+        return {
+          ...again,
+          previewAtMs,
+          doneAtMs: Date.now() - start,
+        }
+      }
     }
-    await Bun.sleep(4000)
+    await Bun.sleep(2000)
   }
   throw new Error(`timeout waiting for ${projectId}`)
 }
@@ -189,6 +200,8 @@ async function runOne(userId: string, framework: Framework, language: "typescrip
     entry,
     entrySnippet,
     fileCount: paths.length,
+    previewAtMs: done.previewAtMs ?? null,
+    doneAtMs: done.doneAtMs ?? null,
   }
 }
 
@@ -230,10 +243,11 @@ async function main() {
     console.log("[smoke] fixture detector OK (Next missing Nav)")
   }
 
-  const results = await Promise.all([
-    runOne(user.id, "react", "typescript"),
-    runOne(user.id, "nextjs", "typescript"),
-  ])
+  // Sequential: parallel builds contend for DeepSeek/E2B and inflate wall times.
+  const results = [
+    await runOne(user.id, "react", "typescript"),
+    await runOne(user.id, "nextjs", "typescript"),
+  ]
 
   console.log("\n===== SMOKE RESULTS =====")
   for (const r of results) {

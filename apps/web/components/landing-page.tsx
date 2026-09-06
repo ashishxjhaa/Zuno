@@ -5,6 +5,7 @@ import { HeroSky } from "@/components/hero-sky"
 import { IdeaToLife } from "@/components/idea-to-life"
 import { ModernFeatures } from "@/components/modern-features"
 import { ShowcaseMarquee } from "@/components/showcase-marquee"
+import { ShaderRibbon } from "@/components/shader-ribbon"
 import { SiteFooter } from "@/components/site-footer"
 import { SiteHeader } from "@/components/site-header"
 import { useSession } from "@/lib/session"
@@ -38,6 +39,8 @@ export function LandingPage() {
       <ShowcaseMarquee />
       <div id="how-it-works"><IdeaToLife /></div>
       <div id="modern-sites"><ModernFeatures /></div>
+
+      <ShaderRibbon />
 
       <SiteFooter />
     </div>

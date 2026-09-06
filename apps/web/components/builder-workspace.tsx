@@ -17,6 +17,7 @@ import {
 import {
   confirmProjectStack,
   frontend,
+  restoreProject,
   streamConversation,
   type ProjectFramework,
   type ProjectLanguage,
@@ -145,6 +146,43 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
     }
     void loadProject()
   }, [user, loadProject])
+
+  // Bring preview back when opening an existing READY project (sandbox may have died).
+  const restoreOnceRef = useRef(false)
+  useEffect(() => {
+    restoreOnceRef.current = false
+  }, [projectId])
+
+  useEffect(() => {
+    if (!user || !project) return
+    if (restoreOnceRef.current) return
+    if (project.isGenerating) return
+    if (project.phase !== "READY" && project.phase !== "BUILDING") return
+    restoreOnceRef.current = true
+    let cancelled = false
+    ;(async () => {
+      try {
+        await restoreProject(projectId)
+        if (!cancelled) await loadProject()
+      } catch (error: unknown) {
+        if (cancelled) return
+        const status = (error as { response?: { status?: number } }).response
+          ?.status
+        const err = (error as { response?: { data?: { error?: unknown } } })
+          .response?.data?.error
+        if (status === 409 && typeof err === "string") {
+          toast.error(err)
+        } else if (typeof err === "string") {
+          toast.error(err)
+        } else {
+          toast.error("Could not restore preview. Chat history is still here.")
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [user, project, projectId, loadProject])
 
   useEffect(() => {
     if (project?.phase) {
@@ -455,9 +493,9 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
   })()
   const chatCooking =
     generating && messages.some((message) => message.from === "USER")
-  // Keep the mark over the iframe until generation is done and the preview has loaded.
-  const showOverlay =
-    !planning && (generating || !project?.previewUrl || !previewReady)
+  // Morph stays up until the entire site is generated (isGenerating/stream done).
+  // Preview URL may appear earlier; product intent is animation until full gen finishes.
+  const showOverlay = !planning && generating
   const workspaceLocked = showOverlay
   const splitChatWidth = chatCollapsed ? 0 : CHAT_WIDTH
 

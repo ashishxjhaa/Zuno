@@ -24,9 +24,11 @@ import { buildSystemPrompt } from "../prompts/system"
 
 const MAX_STEPS = 36
 /** Ceiling for first build; early-complete usually exits sooner when the site is solid. */
-const FIRST_BUILD_STEPS = 22
-/** Do not early-complete before this many tool rounds (0-indexed step). */
-const EARLY_COMPLETE_MIN_STEP = 1
+const FIRST_BUILD_STEPS = 28
+/** Extra tool rounds allowed only while first-paint @/ imports remain unresolved. */
+const IMPORT_REPAIR_EXTRA_STEPS = 10
+/** Earliest tool round (0-indexed) eligible for early-complete. Gate remains siteLooksSubstantial + resolved imports. */
+const EARLY_COMPLETE_MIN_STEP = 0
 
 const pathSchema = z.object({ path: z.string().min(1) })
 const writeSchema = z.object({
@@ -169,11 +171,14 @@ async function emitTextChunks(
   onToken?: (token: string) => void
 ) {
   if (!onToken || !text) return
-  const size = 10
+  if (text.length <= 80) {
+    onToken(text)
+    return
+  }
+  const size = 24
   for (let i = 0; i < text.length; i += size) {
     onToken(text.slice(i, i + size))
-    // Yield so SSE frames flush progressively.
-    await new Promise((r) => setTimeout(r, 8))
+    if (i + size < text.length) await new Promise((r) => setTimeout(r, 0))
   }
 }
 
@@ -235,35 +240,53 @@ export async function startProjectBuild(projectId: string) {
       await installDependencies(sandbox)
     }
 
-    // Bring Vite/Next up before LLM file churn so the first paint is reliable.
-    await ensureDevServer(sandbox, template.port, template.kind)
-    const previewUrl = getPreviewUrl(sandbox, template.port)
-    console.log(
-      `[bootstrap] ${projectId} preview up in ${Date.now() - t0}ms (prebaked=${prebaked})`
-    )
-    await prisma.project.update({
-      where: { id: projectId },
-      data: { previewUrl, phase: "READY" },
-    })
+    // Overlap Vite/Next boot with the first LLM round. File writes hit the
+    // sandbox filesystem either way; publish previewUrl when the port opens.
+    const bootPreview = (async () => {
+      await ensureDevServer(sandbox!, template.port, template.kind)
+      const previewUrl = getPreviewUrl(sandbox!, template.port)
+      console.log(
+        `[bootstrap] ${projectId} preview up in ${Date.now() - t0}ms (prebaked=${prebaked})`
+      )
+      await prisma.project.update({
+        where: { id: projectId },
+        data: { previewUrl, phase: "READY" },
+      })
+    })()
 
     // Phase B: generation. On LLM failure keep sandbox + previewUrl alive.
     try {
-      await runGeneration(projectId, {
-        maxSteps: FIRST_BUILD_STEPS,
-        firstPaint: true,
+      await Promise.all([
+        bootPreview,
+        runGeneration(projectId, {
+          maxSteps: FIRST_BUILD_STEPS,
+          firstPaint: true,
+        }),
+      ])
+
+      // Unblock the UI as soon as generation finishes. Preview is already live via HMR;
+      // post-gen ensure + snapshot must not add to time-to-ready.
+      await prisma.project.update({
+        where: { id: projectId },
+        data: { isGenerating: false },
       })
 
-      // LLM may rewrite package.json / vite.config; make sure the listener survived.
-      try {
-        const live = await connectSandbox(sandboxId)
-        await ensureDevServer(live, template.port, template.kind)
-      } catch (error) {
-        console.error(`[bootstrap] ${projectId} post-gen ensureDevServer`, error)
-      }
-
-      queueSaveProjectSnapshot(projectId)
+      void (async () => {
+        try {
+          const live = await connectSandbox(sandboxId)
+          await ensureDevServer(live, template.port, template.kind)
+        } catch (error) {
+          console.error(`[bootstrap] ${projectId} post-gen ensureDevServer`, error)
+        }
+        queueSaveProjectSnapshot(projectId)
+      })()
     } catch (genError) {
       console.error(`[bootstrap] ${projectId} generation`, genError)
+      try {
+        await bootPreview
+      } catch {
+        // ignore boot errors here
+      }
       try {
         await prisma.conversationHistory.create({
           data: {
@@ -277,12 +300,11 @@ export async function startProjectBuild(projectId: string) {
       } catch {
         // project may already be gone
       }
+      await prisma.project.update({
+        where: { id: projectId },
+        data: { isGenerating: false },
+      })
     }
-
-    await prisma.project.update({
-      where: { id: projectId },
-      data: { isGenerating: false },
-    })
   } catch (error) {
     console.error(`[bootstrap] ${projectId}`, error)
     if (sandbox) {
@@ -398,11 +420,13 @@ async function runGeneration(
 
   const sandbox = await connectSandbox(project.sandboxId)
   // Paths only: avoid reading every file body before the first LLM turn.
-  const filePaths = await listProjectPaths(project.sandboxId)
-  const history = await prisma.conversationHistory.findMany({
-    where: { projectId, type: "TEXT_MESSAGE", hidden: false },
-    orderBy: { createdAt: "asc" },
-  })
+  const [filePaths, history] = await Promise.all([
+    listProjectPaths(project.sandboxId),
+    prisma.conversationHistory.findMany({
+      where: { projectId, type: "TEXT_MESSAGE", hidden: false },
+      orderBy: { createdAt: "asc" },
+    }),
+  ])
 
   const system = buildSystemPrompt({
     framework: project.framework,
@@ -610,14 +634,16 @@ async function findMissingAtImports(opts: {
   const seenSpec = new Set<string>()
 
   for (const path of scanPaths) {
-    // Always read from sandbox so editFile patches are not missed.
-    let source: string
-    try {
-      source = await readSandboxFile(sandbox, path)
-      writeContents.set(path, source)
-    } catch {
-      source = writeContents.get(path) ?? ""
-      if (!source) continue
+    // Prefer contents we just wrote this generation (avoids E2B RTTs on the hot path).
+    // Fall back to sandbox read for editFile-only patches or files we did not track.
+    let source = writeContents.get(path) ?? ""
+    if (!source) {
+      try {
+        source = await readSandboxFile(sandbox, path)
+        writeContents.set(path, source)
+      } catch {
+        continue
+      }
     }
     for (const spec of extractAtImports(source)) {
       if (seenSpec.has(spec)) continue
@@ -645,15 +671,107 @@ function siteLooksSubstantial(writes: Map<string, number>) {
       sectionBytes.push(bytes)
     }
   }
-  if (entryBytes < 1200) return false
+  // Entry is often a thin composer (<1KB); quality lives in section components.
+  // Requiring entry>=1200 blocked early-complete on real polished sites.
+  if (entryBytes < 180) return false
   const solidSections = sectionBytes.filter((n) => n >= 500)
   if (solidSections.length < 3) return false
   const sectionTotal = sectionBytes.reduce((a, b) => a + b, 0)
   const total = entryBytes + sectionTotal
-  // Prefer 4+ section files, but allow 3 very rich ones.
-  if (solidSections.length >= 4 && total >= 7000) return true
-  if (solidSections.length >= 3 && total >= 11000) return true
+  if (solidSections.length >= 5 && sectionTotal >= 5500) return true
+  if (solidSections.length >= 4 && sectionTotal >= 6500) return true
+  if (solidSections.length >= 3 && sectionTotal >= 10000) return true
+  if (entryBytes >= 1200 && solidSections.length >= 3 && total >= 7000) return true
   return false
+}
+
+
+/** Read a JSON string starting at the first character AFTER the opening quote. */
+function readJsonStringAt(
+  raw: string,
+  start: number
+): { value: string; end: number } | null {
+  let i = start
+  let body = ""
+  while (i < raw.length) {
+    const c = raw[i]
+    if (c === "\\") {
+      if (i + 1 >= raw.length) return null
+      body += c + raw[i + 1]
+      i += 2
+      continue
+    }
+    if (c === '"') {
+      try {
+        return { value: JSON.parse(`"${body}"`) as string, end: i + 1 }
+      } catch {
+        return null
+      }
+    }
+    body += c
+    i++
+  }
+  return null
+}
+
+/**
+ * Recover writeFiles payloads when the model emits truncated/invalid JSON
+ * (common with large multi-file first paints). Returns only complete path/contents pairs.
+ */
+function recoverWriteFilesArgs(
+  rawArgs: string
+): Array<{ path: string; contents: string }> {
+  const files: Array<{ path: string; contents: string }> = []
+  let i = 0
+  while (i < rawArgs.length) {
+    const pathKey = rawArgs.indexOf('"path"', i)
+    if (pathKey < 0) break
+    const afterKey = rawArgs.slice(pathKey + 6)
+    const colon = afterKey.match(/^\s*:\s*"/)
+    if (!colon) {
+      i = pathKey + 6
+      continue
+    }
+    const pathStart = pathKey + 6 + colon[0].length
+    const pathStr = readJsonStringAt(rawArgs, pathStart)
+    if (!pathStr) break
+    const afterPath = rawArgs.slice(pathStr.end)
+    const contentsKey = afterPath.match(/^\s*,\s*"contents"\s*:\s*"/)
+    if (!contentsKey) {
+      i = pathStr.end
+      continue
+    }
+    const contentsStart = pathStr.end + contentsKey[0].length
+    const contentsStr = readJsonStringAt(rawArgs, contentsStart)
+    if (!contentsStr) break // truncated last file — keep prior complete ones
+    if (pathStr.value.trim()) {
+      files.push({ path: pathStr.value, contents: contentsStr.value })
+    }
+    i = contentsStr.end
+  }
+  return files
+}
+
+function parseWriteFilesPayload(
+  rawArgs: string
+): Array<{ path: string; contents: string }> | null {
+  try {
+    const parsed = writeFilesSchema.safeParse(JSON.parse(rawArgs) as unknown)
+    if (parsed.success) return parsed.data.files
+  } catch {
+    // fall through to recovery
+  }
+  const recovered = recoverWriteFilesArgs(rawArgs)
+  return recovered.length > 0 ? recovered : null
+}
+
+function parseToolArgs(rawArgs: string): unknown {
+  try {
+    return JSON.parse(rawArgs) as unknown
+  } catch {
+    // Models occasionally emit lightly-malformed JSON; recover file payloads when possible.
+    return null
+  }
 }
 
 function recordWriteStats(
@@ -664,7 +782,8 @@ function recordWriteStats(
   rawArgs: string
 ) {
   try {
-    const args = JSON.parse(rawArgs) as unknown
+    const args = parseToolArgs(rawArgs)
+    if (args == null) return
     if (name === "writeFile" || name === "updateFile") {
       const parsed = writeSchema.safeParse(args)
       if (parsed.success) {
@@ -676,14 +795,35 @@ function recordWriteStats(
       return
     }
     if (name === "writeFiles") {
-      const parsed = writeFilesSchema.safeParse(args)
+      const files =
+        args != null
+          ? (() => {
+              const parsed = writeFilesSchema.safeParse(args)
+              return parsed.success ? parsed.data.files : null
+            })()
+          : null
+      const list = files ?? recoverWriteFilesArgs(rawArgs)
+      for (const file of list) {
+        const path = normalizeProjectPath(file.path)
+        writes.set(path, file.contents.length)
+        writeContents.set(path, file.contents)
+        knownPaths.add(path)
+      }
+      return
+    }
+    if (name === "editFile") {
+      const parsed = editSchema.safeParse(args)
       if (parsed.success) {
-        for (const file of parsed.data.files) {
-          const path = normalizeProjectPath(file.path)
-          writes.set(path, file.contents.length)
-          writeContents.set(path, file.contents)
-          knownPaths.add(path)
+        const path = normalizeProjectPath(parsed.data.path)
+        const prev = writeContents.get(path)
+        if (prev && prev.includes(parsed.data.find)) {
+          const next = parsed.data.replaceAll
+            ? prev.split(parsed.data.find).join(parsed.data.replace)
+            : prev.replace(parsed.data.find, parsed.data.replace)
+          writeContents.set(path, next)
+          writes.set(path, next.length)
         }
+        knownPaths.add(path)
       }
     }
   } catch {
@@ -714,6 +854,32 @@ async function runToolLoop(
   const framework: "nextjs" | "react" =
     options.framework === "nextjs" ? "nextjs" : "react"
   let importRepairNudge = 0
+  // Extend only when unresolved imports would otherwise force a false "done".
+  let stepLimit = maxSteps
+  const absoluteStepCap = options.earlyComplete
+    ? maxSteps + IMPORT_REPAIR_EXTRA_STEPS
+    : maxSteps
+
+  async function unresolvedImports(): Promise<string[]> {
+    if (!options.earlyComplete) return []
+    return findMissingAtImports({
+      sandbox,
+      writes,
+      writeContents,
+      knownPaths,
+      framework,
+    })
+  }
+
+  function extendForImportRepair(missing: string[]) {
+    if (!options.earlyComplete || missing.length === 0) return
+    if (stepLimit < absoluteStepCap) {
+      stepLimit += 1
+      console.log(
+        `[generate] ${projectId} extending for import repair (stepLimit=${stepLimit}, missing=${missing.join(", ")})`
+      )
+    }
+  }
 
   async function persistAssistantText(raw: string): Promise<GenerateStreamResult> {
     // First paint: never trust model process-talk. Always the friendly done line.
@@ -760,7 +926,7 @@ async function runToolLoop(
     return persistAssistantText(raw)
   }
 
-  for (let step = 0; step < maxSteps; step++) {
+  for (let step = 0; step < stepLimit; step++) {
     // DeepSeek Node SDK: pass thinking as a top-level body field (Python uses extra_body).
     // Disable for codegen tool loops (speed/reliability). Still pass reasoning_content when present.
     // When streaming handlers exist, stream the model turn; tool rounds suppress content tokens.
@@ -772,11 +938,21 @@ async function runToolLoop(
       OpenAI.Chat.ChatCompletionMessage["tool_calls"]
     > = []
 
+    // First paint already includes the project file list — skip readFile so the
+    // model cannot burn 2-3 rounds reading templates before writeFiles.
+    const stepTools = options.earlyComplete
+      ? tools.filter(
+          (t) =>
+            t.type === "function" &&
+            t.function.name !== "readFile"
+        )
+      : tools
+
     if (wantStream) {
       const stream = await getDeepseek().chat.completions.create({
         model: "deepseek-v4-flash",
         messages,
-        tools,
+        tools: stepTools,
         stream: true,
         thinking: { type: "disabled" },
       } as OpenAI.Chat.ChatCompletionCreateParamsStreaming)
@@ -844,7 +1020,7 @@ async function runToolLoop(
       const completion = await getDeepseek().chat.completions.create({
         model: "deepseek-v4-flash",
         messages,
-        tools,
+        tools: stepTools,
         thinking: { type: "disabled" },
       } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming)
 
@@ -861,16 +1037,12 @@ async function runToolLoop(
     }
 
     if (toolCalls.length === 0) {
-      if (options.earlyComplete && importRepairNudge < 2) {
-        const missing = await findMissingAtImports({
-          sandbox,
-          writes,
-          writeContents,
-          knownPaths,
-          framework,
-        })
+      // Never end first paint while @/ imports are unresolved (no nudge cap, no give-up).
+      if (options.earlyComplete) {
+        const missing = await unresolvedImports()
         if (missing.length > 0) {
           importRepairNudge += 1
+          extendForImportRepair(missing)
           console.log(
             `[generate] ${projectId} blocked done reply; missing imports: ${missing.join(", ")}`
           )
@@ -883,7 +1055,7 @@ async function runToolLoop(
             role: "system",
             content:
               `CRITICAL: Do not finish yet. These @/ imports are unresolved (file missing): ${missing.join(", ")}. ` +
-              `Use writeFiles NOW to create each missing component with a named export matching the import. ` +
+              `Use writeFiles NOW (or multiple writeFile calls in THIS step) to create each missing component with a named export matching the import. ` +
               `Do not claim the site is ready until every import resolves.`,
           })
           continue
@@ -911,37 +1083,47 @@ async function runToolLoop(
         if (call.type !== "function") {
           return { call, result: "Unsupported tool call" as string }
         }
-        recordWriteStats(
-          writes,
-          writeContents,
-          knownPaths,
-          call.function.name,
-          call.function.arguments
-        )
         const result = await runTool(
           sandbox,
           call.function.name,
           call.function.arguments
         )
+        // Record after the tool runs so successful writes always update readiness
+        // even when a pre-parse was skipped.
+        if (!result.startsWith("Error:")) {
+          recordWriteStats(
+            writes,
+            writeContents,
+            knownPaths,
+            call.function.name,
+            call.function.arguments
+          )
+        }
         return { call, result }
       })
     )
 
+    const historyRows: Array<{
+      projectId: string
+      type: "TOOL_CALL"
+      from: "ASSISTANT"
+      hidden: true
+      toolCall: (typeof KIND)[string]
+      contents: string
+    }> = []
     for (const { call, result } of callResults) {
       if (call.type !== "function") continue
-      await prisma.conversationHistory.create({
-        data: {
-          projectId,
-          type: "TOOL_CALL",
-          from: "ASSISTANT",
-          hidden: true,
-          toolCall: KIND[call.function.name],
-          contents: JSON.stringify({
-            name: call.function.name,
-            arguments: call.function.arguments,
-            result,
-          }),
-        },
+      historyRows.push({
+        projectId,
+        type: "TOOL_CALL",
+        from: "ASSISTANT",
+        hidden: true,
+        toolCall: KIND[call.function.name],
+        contents: JSON.stringify({
+          name: call.function.name,
+          arguments: call.function.arguments,
+          result,
+        }),
       })
       messages.push({
         role: "tool",
@@ -949,26 +1131,36 @@ async function runToolLoop(
         content: result,
       })
     }
+    if (historyRows.length === 1) {
+      await prisma.conversationHistory.create({ data: historyRows[0]! })
+    } else if (historyRows.length > 1) {
+      await prisma.conversationHistory.createMany({ data: historyRows })
+    }
 
     // Speed win: once entry + several solid sections exist, stop burning steps.
     // Never early-complete while entry/section files still import missing @/ modules.
-    if (
-      options.earlyComplete &&
-      step >= EARLY_COMPLETE_MIN_STEP &&
-      siteLooksSubstantial(writes)
-    ) {
-      const missing = await findMissingAtImports({
-        sandbox,
-        writes,
-        writeContents,
-        knownPaths,
-        framework,
-      })
-      if (missing.length === 0) {
-        return await finishEarlyWithDoneReply()
-      }
-      if (importRepairNudge < 3) {
+    if (options.earlyComplete && step >= EARLY_COMPLETE_MIN_STEP) {
+      if (!siteLooksSubstantial(writes)) {
+        console.log(
+          `[generate] ${projectId} step ${step} not substantial yet (writes=${writes.size})`
+        )
+        if (step < 2) {
+          messages.push({
+            role: "system",
+            content:
+              "First paint incomplete. In this SAME tool round, write the entry page AND every section component " +
+              "(nav, hero, multiple rich sections, CTA, footer) via writeFiles OR multiple writeFile calls together. " +
+              "Do not write only CSS/tokens. Keep full design quality — do not omit sections.",
+          })
+        }
+      } else {
+        const missing = await unresolvedImports()
+        if (missing.length === 0) {
+          return await finishEarlyWithDoneReply()
+        }
+        // No cap: never early-complete (or give up) with unresolved @/ imports.
         importRepairNudge += 1
+        extendForImportRepair(missing)
         console.log(
           `[generate] ${projectId} early-complete blocked; missing: ${missing.join(", ")}`
         )
@@ -983,6 +1175,19 @@ async function runToolLoop(
     }
   }
 
+  // Refuse to ship a first paint that still has broken @/ imports.
+  if (options.earlyComplete) {
+    const missing = await unresolvedImports()
+    if (missing.length > 0) {
+      console.error(
+        `[generate] ${projectId} REFUSING done; unresolved after repair budget: ${missing.join(", ")}`
+      )
+      throw new Error(
+        `First paint incomplete: unresolved @/ imports: ${missing.join(", ")}`
+      )
+    }
+  }
+
   if (options.saveAssistantText) {
     return persistAssistantText(fallback)
   }
@@ -992,6 +1197,20 @@ async function runToolLoop(
 // Run one file tool on the sandbox. Returns a string for the model.
 async function runTool(sandbox: Sandbox, name: string, rawArgs: string) {
   try {
+    // writeFiles often exceeds clean JSON from the model; recover complete files.
+    if (name === "writeFiles") {
+      const files = parseWriteFilesPayload(rawArgs)
+      if (!files || files.length === 0) {
+        return (
+          "Error: writeFiles JSON was invalid/truncated and no complete files could be recovered. " +
+          "Retry with several writeFile calls in THIS SAME step (one per file), or a smaller writeFiles batch."
+        )
+      }
+      await writeProjectFiles(sandbox, files)
+      const paths = files.map((f) => f.path)
+      return `Wrote ${paths.length} files: ${paths.join(", ")}`
+    }
+
     const args = JSON.parse(rawArgs) as unknown
     if (name === "readFile") {
       const { path } = pathSchema.parse(args)
@@ -1001,12 +1220,6 @@ async function runTool(sandbox: Sandbox, name: string, rawArgs: string) {
       const { path, contents } = writeSchema.parse(args)
       await writeProjectFile(sandbox, path, contents)
       return `Wrote ${path}`
-    }
-    if (name === "writeFiles") {
-      const { files } = writeFilesSchema.parse(args)
-      await writeProjectFiles(sandbox, files)
-      const paths = files.map((f) => f.path)
-      return `Wrote ${paths.length} files: ${paths.join(", ")}`
     }
     if (name === "updateFile") {
       const { path, contents } = writeSchema.parse(args)

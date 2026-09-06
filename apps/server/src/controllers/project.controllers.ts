@@ -470,16 +470,25 @@ export async function restore(req: Request, res: Response) {
         })
       } catch (error) {
         console.warn(`[restore] reuse failed ${id}`, error)
+        // Drop stale ids so list/get stop probing a dead sandbox.
+        await prisma.project.update({
+          where: { id },
+          data: { sandboxId: null, previewUrl: null },
+        })
       }
     }
 
-    if (!project.snapshotKey) {
+    // Re-read after possible stale-id clear.
+    const latest = await prisma.project.findUnique({ where: { id } })
+    if (!latest?.snapshotKey) {
       return res.status(409).json({
-        error: "No snapshot available for this project yet",
+        error:
+          "Preview expired and no saved snapshot is available for this project. Chat history is still here — ask Zuno to rebuild the site.",
       })
     }
+    const snapshotKey = latest.snapshotKey
 
-    const archive = await downloadSnapshot(project.snapshotKey)
+    const archive = await downloadSnapshot(snapshotKey)
     const created = await createSandboxWithTemplate(
       project.framework,
       project.language
