@@ -10,7 +10,7 @@
 
 <p align="center">
   <strong>Prompt. Preview. Ship.</strong><br />
-  You do not need a developer team to bring an idea to life. Chat-only AI website builder with a live E2B preview, stack pickers (React or Next, JS or TS), GitHub push, and source download.
+  You do not need a developer team to bring an idea to life. Full-stack AI website builder with live E2B preview, iterate, push to GitHub, and publish with a live link.
 </p>
 
 <p align="center">
@@ -58,7 +58,7 @@
 
 ## Why Zuno?
 
-Most AI builders dump a zip and leave you guessing. Zuno keeps you in a **chat-first builder** with a **real live preview** in an E2B sandbox. You clarify, pick a stack, watch the site generate, then ship edits by talking - no drag-and-drop canvas required.
+Most AI builders dump a zip and leave you guessing. Zuno keeps you in a **conversational builder** with a **real live preview** in an E2B sandbox. You clarify, pick a stack, watch the site generate, then ship edits by talking - no drag-and-drop canvas required.
 
 Built as a full-stack + AI portfolio product: auth, projects, sandboxes, publish, GitHub push, and codebase download.
 
@@ -70,7 +70,7 @@ Built as a full-stack + AI portfolio product: auth, projects, sandboxes, publish
 | :--- | :--- |
 | **Prompt to live site** | Clarify in chat, choose React or Next (JS or TS), and DeepSeek builds a complete Tailwind site. |
 | **Live sandbox preview** | The builder iframe is a real E2B Vite/Next URL. Watch the site come together as files land. |
-| **Chat-only edits** | Change the site by talking. The model uses `readFile`, `writeFile`, `updateFile`, and `deleteFile`. |
+| **Conversational edits** | Change the site by talking. The model uses `readFile`, `writeFile`, `updateFile`, and `deleteFile`. |
 | **Stack choice** | Vite + React or Next.js, JavaScript or TypeScript, with prebaked E2B templates for fast first paint. |
 | **Push to GitHub** | Connect GitHub OAuth, create or link a repo, and push the generated source from the sandbox. |
 | **Download codebase** | Export a source `.zip` (no `node_modules`) from the Download tab. |
