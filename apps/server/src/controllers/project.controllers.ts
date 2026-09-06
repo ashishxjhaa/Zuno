@@ -142,6 +142,9 @@ export async function getById(req: Request, res: Response) {
       framework: project.framework,
       language: project.language,
       brief: project.brief,
+      githubRepoUrl: project.githubRepoUrl,
+      githubRepoName: project.githubRepoName,
+      githubRepoFullName: project.githubRepoFullName,
       messages: history.map((message) => ({
         id: message.id,
         from: message.from,

@@ -96,7 +96,14 @@ export async function me(req: Request, res: Response) {
 
     const user = await prisma.user.findUnique({
       where: { id: req.userId },
-      select: { id: true, name: true, email: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        githubUsername: true,
+        githubAccessToken: true,
+        githubConnectedAt: true,
+      },
     })
 
     if (!user) {
@@ -105,7 +112,16 @@ export async function me(req: Request, res: Response) {
       })
     }
 
-    return res.status(200).json({ user })
+    return res.status(200).json({
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        githubConnected: Boolean(user.githubAccessToken && user.githubUsername),
+        githubUsername: user.githubUsername,
+        githubConnectedAt: user.githubConnectedAt,
+      },
+    })
   } catch {
     return res.status(500).json({
       error: "Internal server error",

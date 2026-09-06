@@ -9,6 +9,7 @@ import cookieParser from "cookie-parser"
 import { authRouter } from "./routes/auth.routes"
 import { ideaRouter } from "./routes/idea.routes"
 import { projectRouter } from "./routes/project.routes"
+import { githubRouter } from "./routes/github.routes"
 import { startIdleReaper } from "./lib/idle"
 
 const app = express()
@@ -34,6 +35,7 @@ app.get("/", (_req, res) => {
 app.use("/api/v1/auth", authRouter)
 app.use("/api/v1/ideas", ideaRouter)
 app.use("/api/v1/project", projectRouter)
+app.use("/api/v1/github", githubRouter)
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error(`[Error] ${err.message}`)

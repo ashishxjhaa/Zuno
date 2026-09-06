@@ -29,13 +29,7 @@ const TAB_META: Record<
 > = {
   Preview: { icon: EyeIcon },
   Code: { icon: CodeXmlIcon },
-  GitHub: {
-    icon: GithubIcon,
-    placeholder: {
-      title: "Push to GitHub",
-      body: "Connect a repository and push this generated codebase. Coming soon.",
-    },
-  },
+  GitHub: { icon: GithubIcon },
   Download: {
     icon: DownloadIcon,
     placeholder: {
@@ -106,7 +100,7 @@ export function WorkspaceTabs({
   )
 }
 
-export function WorkspacePlaceholder({ tab }: { tab: "GitHub" | "Download" }) {
+export function WorkspacePlaceholder({ tab }: { tab: "Download" }) {
   const meta = TAB_META[tab]
   const Icon = meta.icon
   const copy = meta.placeholder

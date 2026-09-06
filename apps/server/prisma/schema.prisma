@@ -31,11 +31,14 @@ enum ProjectPhase {
 }
 
 model User {
-  id       String    @id @default(cuid())
-  name     String
-  email    String    @unique
-  password String
-  projects Project[]
+  id                 String    @id @default(cuid())
+  name               String
+  email              String    @unique
+  password           String
+  githubUsername     String?
+  githubAccessToken  String?
+  githubConnectedAt  DateTime?
+  projects           Project[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -53,6 +56,9 @@ model Project {
   previewUrl          String?
   snapshotKey         String?
   snapshotAt          DateTime?
+  githubRepoUrl       String?
+  githubRepoName      String?
+  githubRepoFullName  String?
   published           Boolean                @default(false)
   isGenerating        Boolean                @default(false)
   lastActiveAt        DateTime               @default(now())

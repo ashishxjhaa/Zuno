@@ -118,6 +118,9 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 | `E2B_API_KEY` | Yes | E2B sandbox API key |
 | `DEEPSEEK_API_KEY` | Yes | DeepSeek API key (`https://api.deepseek.com`) |
 | `PORT` | No | API port (default `4000`) |
+| `GITHUB_CLIENT_ID` | For GitHub push | OAuth App client ID |
+| `GITHUB_CLIENT_SECRET` | For GitHub push | OAuth App client secret |
+| `GITHUB_CALLBACK_URL` | For GitHub push | Must match OAuth App callback, e.g. `http://localhost:4000/api/v1/github/oauth/callback` |
 
 ### `apps/web/.env`
 
@@ -209,7 +212,7 @@ Project files live in the sandbox. Postgres stores users, project metadata, and 
 
 1. New Railway project from this GitHub repo (leave Root Directory empty / repo root).
 2. Uses the root `Dockerfile` (copies **only** `apps/server`).
-3. Set `DATABASE_URL`, `JWT_SECRET`, `FRONTEND_URL` (exact Vercel URL, no trailing slash), `E2B_API_KEY`, `DEEPSEEK_API_KEY`, and `NODE_ENV=production`.
+3. Set `DATABASE_URL`, `JWT_SECRET`, `FRONTEND_URL` (exact Vercel URL, no trailing slash), `E2B_API_KEY`, `DEEPSEEK_API_KEY`, GitHub OAuth vars (`GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_CALLBACK_URL` pointing at the public API), and `NODE_ENV=production`.
 4. Set `NEXT_PUBLIC_API_URL` on Vercel to the Railway origin only. Do not append `/api/v1`.
 5. Migrate once: `cd apps/server && bunx prisma migrate deploy`.
 

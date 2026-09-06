@@ -9,6 +9,7 @@ import { ChatPanel, type ChatMessage } from "@/components/chat-panel"
 import { CodeViewer } from "@/components/code-viewer"
 import { GeneratingOverlay } from "@/components/generating-overlay"
 import { PreviewPanel } from "@/components/preview-panel"
+import { GithubPanel } from "@/components/github-panel"
 import {
   WorkspacePlaceholder,
   WorkspaceTabs,
@@ -32,6 +33,7 @@ const POLL_MS = 2000
 const HEARTBEAT_MS = 30_000
 
 type ProjectPayload = {
+  title?: string | null
   previewUrl: string | null
   isGenerating: boolean
   published: boolean
@@ -39,6 +41,9 @@ type ProjectPayload = {
   framework: string | null
   language: string | null
   brief: string | null
+  githubRepoUrl?: string | null
+  githubRepoName?: string | null
+  githubRepoFullName?: string | null
   messages: ChatMessage[]
   files: Record<string, string>
 }
@@ -619,7 +624,13 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
             <div
               className={cn("absolute inset-0", tab !== "GitHub" && "hidden")}
             >
-              <WorkspacePlaceholder tab="GitHub" />
+              <GithubPanel
+                projectId={projectId}
+                projectTitle={project?.title || "zuno-project"}
+                initialRepoUrl={project?.githubRepoUrl ?? null}
+                initialRepoName={project?.githubRepoName ?? null}
+                disabled={workspaceLocked}
+              />
             </div>
             <div
               className={cn("absolute inset-0", tab !== "Download" && "hidden")}
