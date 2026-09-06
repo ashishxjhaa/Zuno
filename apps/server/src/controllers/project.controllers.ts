@@ -14,12 +14,14 @@ import {
   getPreviewUrl,
   installDependencies,
   listProjectFiles,
+  packProjectSnapshot,
   resolveTemplate,
 } from "../lib/e2b"
 import { downloadSnapshot } from "../lib/s3"
 import { generateForProject } from "../lib/llm"
 import { confirmStackAndBuild, runIntakeTurnStreaming } from "../lib/intake"
 import { initSse, keepAliveSse, sendSse } from "../lib/sse"
+import JSZip from "jszip"
 
 export async function create(req: Request, res: Response) {
   try {
@@ -538,5 +540,106 @@ export async function restore(req: Request, res: Response) {
     return res.status(500).json({
       error: "Could not restore project",
     })
+  }
+}
+
+/** GET /api/v1/project/:id/download — zip of current source */
+export async function downloadProject(req: Request, res: Response) {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ error: "Unauthorized" })
+    }
+
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id
+    if (!id) {
+      return res.status(400).json({ error: "Project id is required" })
+    }
+
+    const project = await prisma.project.findUnique({ where: { id } })
+    if (!project || project.userId !== req.userId) {
+      return res.status(404).json({ error: "Project not found" })
+    }
+
+    if (project.phase === "PLANNING") {
+      return res.status(409).json({
+        error: "Finish planning before downloading the codebase",
+      })
+    }
+
+    const slug =
+      project.title
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9._-]+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^[-._]+|[-._]+$/g, "")
+        .slice(0, 60) || "zuno-project"
+
+    // Preferred path: same file walk as GitHub push (reliable on live sandbox)
+    if (project.sandboxId) {
+      try {
+        const files = await listProjectFiles(project.sandboxId)
+        const paths = Object.keys(files)
+        if (paths.length > 0) {
+          const zip = new JSZip()
+          for (const [path, content] of Object.entries(files)) {
+            if (!path || path.includes(" ")) continue
+            zip.file(path, content)
+          }
+          const buffer = await zip.generateAsync({
+            type: "nodebuffer",
+            compression: "DEFLATE",
+            compressionOptions: { level: 6 },
+          })
+          const filename = `${slug}.zip`
+          res.setHeader("Content-Type", "application/zip")
+          res.setHeader(
+            "Content-Disposition",
+            `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`
+          )
+          res.setHeader("Content-Length", String(buffer.byteLength))
+          res.setHeader("Cache-Control", "no-store")
+          await prisma.project.update({
+            where: { id },
+            data: { lastActiveAt: new Date() },
+          })
+          return res.status(200).send(buffer)
+        }
+      } catch (error) {
+        console.error(`[download] zip from sandbox ${id}`, error)
+      }
+    }
+
+    // Fallback: stored snapshot tarball
+    if (project.snapshotKey) {
+      try {
+        const archive = await downloadSnapshot(project.snapshotKey)
+        if (archive && archive.byteLength > 0) {
+          const filename = `${slug}.tar.gz`
+          res.setHeader("Content-Type", "application/gzip")
+          res.setHeader(
+            "Content-Disposition",
+            `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`
+          )
+          res.setHeader("Content-Length", String(archive.byteLength))
+          res.setHeader("Cache-Control", "no-store")
+          await prisma.project.update({
+            where: { id },
+            data: { lastActiveAt: new Date() },
+          })
+          return res.status(200).send(Buffer.from(archive))
+        }
+      } catch (error) {
+        console.error(`[download] snapshot ${id}`, error)
+      }
+    }
+
+    return res.status(409).json({
+      error:
+        "No codebase available to download. Open the preview so Zuno can restore the project, then try again.",
+    })
+  } catch (error) {
+    console.error("[download]", error)
+    return res.status(500).json({ error: "Could not download project" })
   }
 }

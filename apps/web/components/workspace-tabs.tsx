@@ -25,18 +25,12 @@ type TabIcon = ComponentType<{ className?: string }>
 
 const TAB_META: Record<
   WorkspaceTab,
-  { icon: TabIcon; placeholder?: { title: string; body: string } }
+  { icon: TabIcon }
 > = {
   Preview: { icon: EyeIcon },
   Code: { icon: CodeXmlIcon },
   GitHub: { icon: GithubIcon },
-  Download: {
-    icon: DownloadIcon,
-    placeholder: {
-      title: "Download codebase",
-      body: "Save the full generated project as a zip file. Coming soon.",
-    },
-  },
+  Download: { icon: DownloadIcon },
 }
 
 const TAB_TRANSITION = { duration: 0.3, ease: [0.4, 0, 0.2, 1] } as const
@@ -100,23 +94,3 @@ export function WorkspaceTabs({
   )
 }
 
-export function WorkspacePlaceholder({ tab }: { tab: "Download" }) {
-  const meta = TAB_META[tab]
-  const Icon = meta.icon
-  const copy = meta.placeholder
-  if (!copy) return null
-
-  return (
-    <div className="flex h-full w-full items-center justify-center bg-zinc-50">
-      <div className="flex max-w-sm flex-col items-center px-6 text-center">
-        <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-[#ff5800]/10 text-[#ff5800]">
-          <Icon className="size-5" />
-        </div>
-        <p className="text-[15px] font-semibold text-zinc-900">{copy.title}</p>
-        <p className="mt-1.5 text-[13px] leading-relaxed text-zinc-500">
-          {copy.body}
-        </p>
-      </div>
-    </div>
-  )
-}

@@ -9,9 +9,9 @@ import { ChatPanel, type ChatMessage } from "@/components/chat-panel"
 import { CodeViewer } from "@/components/code-viewer"
 import { GeneratingOverlay } from "@/components/generating-overlay"
 import { PreviewPanel } from "@/components/preview-panel"
+import { DownloadPanel } from "@/components/download-panel"
 import { GithubPanel } from "@/components/github-panel"
 import {
-  WorkspacePlaceholder,
   WorkspaceTabs,
   type WorkspaceTab,
 } from "@/components/workspace-tabs"
@@ -635,7 +635,11 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
             <div
               className={cn("absolute inset-0", tab !== "Download" && "hidden")}
             >
-              <WorkspacePlaceholder tab="Download" />
+              <DownloadPanel
+                projectId={projectId}
+                projectTitle={project?.title || "zuno-project"}
+                disabled={workspaceLocked}
+              />
             </div>
             {showOverlay ? <GeneratingOverlay /> : null}
           </div>

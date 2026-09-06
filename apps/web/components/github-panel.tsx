@@ -154,7 +154,7 @@ export function GithubPanel({
     )
     if (!popup) {
       setConnecting(false)
-      // Popup blocked — fall back to same-tab (still no success toast)
+      // Popup blocked - fall back to same-tab (still no success toast)
       window.location.href = start
       return
     }
@@ -253,9 +253,6 @@ export function GithubPanel({
               >
                 Push to GitHub
               </h2>
-              <p className="mt-2 text-[13.5px] leading-relaxed text-zinc-500">
-                Export this generated project to your GitHub account.
-              </p>
             </div>
 
             {!configured ? (
@@ -347,7 +344,7 @@ export function GithubPanel({
                 />
                 <p className="text-[12.5px] text-zinc-400">
                   {repoUrl
-                    ? "Linked repo — pushes update the same repository."
+                    ? "Linked repo - pushes update the same repository."
                     : "Creates a new public repo if it does not exist yet."}
                 </p>
               </div>

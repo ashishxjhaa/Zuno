@@ -2,6 +2,7 @@ import { Router } from "express"
 import {
   conversation,
   create,
+  downloadProject,
   getById,
   heartbeat,
   list,
@@ -22,4 +23,5 @@ projectRouter.post("/:id/heartbeat", authMiddleware, heartbeat)
 projectRouter.post("/:id/publish", authMiddleware, publish)
 projectRouter.post("/:id/github/push", authMiddleware, pushProjectToGithub)
 projectRouter.post("/:id/restore", authMiddleware, restore)
+projectRouter.get("/:id/download", authMiddleware, downloadProject)
 projectRouter.get("/:id", authMiddleware, getById)
