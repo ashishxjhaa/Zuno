@@ -12,16 +12,20 @@ import {
   ensureDevServer,
   getPreviewUrl,
   installDependencies,
-  listProjectFiles,
+  listProjectPaths,
   readSandboxFile,
   resolveTemplate,
   updateProjectFile,
   writeProjectFile,
+  writeProjectFiles,
 } from "./e2b"
 import { buildSystemPrompt } from "../prompts/system"
 
-const MAX_STEPS = 32
-const FIRST_BUILD_STEPS = 28
+const MAX_STEPS = 36
+/** Ceiling for first build; early-complete usually exits sooner when the site is solid. */
+const FIRST_BUILD_STEPS = 22
+/** Do not early-complete before this many tool rounds (0-indexed step). */
+const EARLY_COMPLETE_MIN_STEP = 1
 
 const pathSchema = z.object({ path: z.string().min(1) })
 const writeSchema = z.object({
@@ -33,6 +37,17 @@ const editSchema = z.object({
   find: z.string().min(1),
   replace: z.string(),
   replaceAll: z.boolean().optional(),
+})
+const writeFilesSchema = z.object({
+  files: z
+    .array(
+      z.object({
+        path: z.string().min(1),
+        contents: z.string(),
+      })
+    )
+    .min(1)
+    .max(24),
 })
 
 const tools: OpenAI.Chat.ChatCompletionTool[] = [
@@ -52,7 +67,8 @@ const tools: OpenAI.Chat.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "writeFile",
-      description: "Create or overwrite a project file.",
+      description:
+        "Create or overwrite a project file. Prefer writeFiles when creating several files in one step.",
       parameters: {
         type: "object",
         properties: {
@@ -60,6 +76,31 @@ const tools: OpenAI.Chat.ChatCompletionTool[] = [
           contents: { type: "string" },
         },
         required: ["path", "contents"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "writeFiles",
+      description:
+        "Create or overwrite multiple project files in one call. Prefer this for first paint: entry page + section components together. Each item needs path and full contents.",
+      parameters: {
+        type: "object",
+        properties: {
+          files: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                path: { type: "string" },
+                contents: { type: "string" },
+              },
+              required: ["path", "contents"],
+            },
+          },
+        },
+        required: ["files"],
       },
     },
   },
@@ -114,6 +155,7 @@ const tools: OpenAI.Chat.ChatCompletionTool[] = [
 const KIND: Record<string, ToolCallKind> = {
   readFile: "READ_FILE",
   writeFile: "WRITE_FILE",
+  writeFiles: "WRITE_FILE",
   updateFile: "UPDATE_FILE",
   editFile: "UPDATE_FILE",
   deleteFile: "DELETE_FILE",
@@ -350,7 +392,8 @@ async function runGeneration(
   }
 
   const sandbox = await connectSandbox(project.sandboxId)
-  const files = await listProjectFiles(project.sandboxId)
+  // Paths only: avoid reading every file body before the first LLM turn.
+  const filePaths = await listProjectPaths(project.sandboxId)
   const history = await prisma.conversationHistory.findMany({
     where: { projectId, type: "TEXT_MESSAGE", hidden: false },
     orderBy: { createdAt: "asc" },
@@ -366,7 +409,7 @@ async function runGeneration(
     { role: "system", content: system },
     {
       role: "system",
-      content: `Project files:\n${Object.keys(files).sort().join("\n") || "(empty)"}`,
+      content: `Project files:\n${filePaths.sort().join("\n") || "(empty)"}`,
     },
   ]
 
@@ -374,7 +417,7 @@ async function runGeneration(
     messages.push({
       role: "system",
       content:
-        "First paint: immediately replace the placeholder page (app/page or src/App) so the preview is never left on a blank/building screen. Ship a finished-looking site. Prefer writing the entry page as one complete file first, then split components if steps remain. Match the quality bar (art direction, real copy, nav/hero/sections/footer). Do not change package.json scripts or vite/next server host/port settings.",
+        "First paint (speed + quality): (1) Briefly commit to art direction and a section list (nav, hero, rich sections, CTA, footer). Keep that planning short and never dump it in the final user reply. (2) In the SAME tool round, write the entry page AND several section components together: prefer writeFiles with multiple {path, contents}, or multiple writeFile calls. Every tool call in a step runs. (3) Steps 1-2 must land a polished shell (layout/globals tokens if needed, nav, hero, entry composition) so HMR shows something finished-looking quickly; steps 3-4 enrich remaining sections. (4) Prefer complete file writes over tiny edits. The project file list is already provided: do not re-list or re-read the whole tree; read only files you must patch. (5) Full marketing sites are allowed. Match the quality bar. Never leave the placeholder page. Do not change package.json scripts or vite/next server host/port settings. (6) As soon as nav, hero, multiple rich sections, CTA, and footer are in place and look finished, stop calling tools and reply with one short done sentence.",
     })
   }
 
@@ -395,9 +438,8 @@ async function runGeneration(
     {
       saveAssistantText: true,
       handlers,
-      fallbackReply: opts?.firstPaint
-        ? "Your site is ready. Check the preview."
-        : undefined,
+      fallbackReply: opts?.firstPaint ? FIRST_PAINT_DONE_REPLY : DEFAULT_DONE_REPLY,
+      earlyComplete: Boolean(opts?.firstPaint),
     }
   )
 }
@@ -405,19 +447,30 @@ async function runGeneration(
 /**
  * The final reply is shown verbatim in chat. Self-review and rule-talk
  * (file names, dash/typography lectures, "X is intact") must never reach
- * the user — fall back to a plain completion message instead.
+ * the user - fall back to a plain completion message instead.
  */
 const META_REPLY_HARD_RE =
-  /\b[\w.-]+\.(tsx|jsx|ts|js|css|json|html|md)\b|\b(em|en)[\s‐-―-]?dash|\btypograph|\bintact\b|\bthe ban\b/i
+  /\b[\w.-]+\.(tsx|jsx|ts|js|css|json|html|md)\b|\b(em|en)[\s‐-―-]?dash|\btypograph|\bintact\b|\bthe ban\b|\b(className|classname|shadcn|tailwind|variant|props?|export(?:s|ed)?|import(?:s|ed)?|component(?:s)?)\b|\bfiles? are in place\b|\boverrid(?:e|ing)\b|\bcursor-pointer\b/i
 const META_REPLY_SOFT_RE =
   /\b(I|I'|me|my|we|no)\b[^.!?]{0,80}\b(rules?|guidelines?|instructions?|bans?|banned|violat\w*|allow(?:ed|able)?|acceptable|permitted)\b/i
 // Model self-talk ("Now let me verify...", "I'll check...") is never a user reply.
 const META_REPLY_SELF_TALK_RE =
   /\b(let me|i'?ll|i need to|now i'?ll?|i will)\b[^.!?]{0,60}\b(verify|double[\s-]?check|check|review|inspect|confirm|make sure|ensure|fix)\b|\b(no harm|already wrote|was identical|same as before)\b/i
+// Never surface internal step-budget / process wording.
+const META_REPLY_STOP_RE =
+  /stopped after too many|too many file edits|step budget|max(?:imum)? steps|ran out of (?:steps|edits)/i
+
+const DEFAULT_DONE_REPLY = "Done. Tell me what to tweak."
+const FIRST_PAINT_DONE_REPLY = "Your site is ready. Check the preview."
+
+function doneReply(fallbackReply?: string) {
+  const trimmed = fallbackReply?.trim()
+  return trimmed || DEFAULT_DONE_REPLY
+}
 
 function shortenUserFacingReply(
   raw: string,
-  fallback = "Done. Check the preview."
+  fallback = DEFAULT_DONE_REPLY
 ) {
   const cleaned = raw
     .replace(/```[\s\S]*?```/g, "")
@@ -427,7 +480,8 @@ function shortenUserFacingReply(
     !cleaned ||
     META_REPLY_HARD_RE.test(cleaned) ||
     META_REPLY_SOFT_RE.test(cleaned) ||
-    META_REPLY_SELF_TALK_RE.test(cleaned)
+    META_REPLY_SELF_TALK_RE.test(cleaned) ||
+    META_REPLY_STOP_RE.test(cleaned)
   ) {
     return fallback
   }
@@ -435,6 +489,81 @@ function shortenUserFacingReply(
   const two = parts.slice(0, 2).join(" ").trim()
   if (two.length <= 220) return two
   return `${two.slice(0, 217).trim()}...`
+}
+
+function normalizeProjectPath(path: string) {
+  return path.replace(/\\/g, "/").replace(/^\.\//, "")
+}
+
+function isEntryPagePath(path: string) {
+  const n = normalizeProjectPath(path)
+  return (
+    /(^|\/)app\/page\.(tsx|jsx|ts|js)$/.test(n) ||
+    /(^|\/)src\/App\.(tsx|jsx|ts|js)$/.test(n) ||
+    /(^|\/)App\.(tsx|jsx|ts|js)$/.test(n)
+  )
+}
+
+function isSectionComponentPath(path: string) {
+  const n = normalizeProjectPath(path)
+  if (!/\.(tsx|jsx|ts|js)$/.test(n)) return false
+  if (/(^|\/)components\/ui\//.test(n)) return false
+  return /(^|\/)(src\/)?components\//.test(n)
+}
+
+/** True when this generation already wrote a finished-looking marketing shell. */
+function siteLooksSubstantial(writes: Map<string, number>) {
+  let entryBytes = 0
+  const sectionBytes: number[] = []
+  for (const [path, bytes] of writes) {
+    if (isEntryPagePath(path)) {
+      entryBytes = Math.max(entryBytes, bytes)
+    } else if (isSectionComponentPath(path)) {
+      sectionBytes.push(bytes)
+    }
+  }
+  if (entryBytes < 1200) return false
+  const solidSections = sectionBytes.filter((n) => n >= 500)
+  if (solidSections.length < 3) return false
+  const sectionTotal = sectionBytes.reduce((a, b) => a + b, 0)
+  const total = entryBytes + sectionTotal
+  // Prefer 4+ section files, but allow 3 very rich ones.
+  if (solidSections.length >= 4 && total >= 7000) return true
+  if (solidSections.length >= 3 && total >= 11000) return true
+  return false
+}
+
+function recordWriteStats(
+  writes: Map<string, number>,
+  name: string,
+  rawArgs: string
+) {
+  try {
+    const args = JSON.parse(rawArgs) as unknown
+    if (name === "writeFile" || name === "updateFile") {
+      const parsed = writeSchema.safeParse(args)
+      if (parsed.success) {
+        writes.set(
+          normalizeProjectPath(parsed.data.path),
+          parsed.data.contents.length
+        )
+      }
+      return
+    }
+    if (name === "writeFiles") {
+      const parsed = writeFilesSchema.safeParse(args)
+      if (parsed.success) {
+        for (const file of parsed.data.files) {
+          writes.set(
+            normalizeProjectPath(file.path),
+            file.contents.length
+          )
+        }
+      }
+    }
+  } catch {
+    // Ignore malformed tool args; readiness check simply stays conservative.
+  }
 }
 
 async function runToolLoop(
@@ -446,8 +575,57 @@ async function runToolLoop(
     saveAssistantText: boolean
     handlers?: GenerateStreamHandlers
     fallbackReply?: string
+    earlyComplete?: boolean
   }
 ): Promise<GenerateStreamResult> {
+  const fallback = doneReply(options.fallbackReply)
+  const writes = new Map<string, number>()
+
+  async function persistAssistantText(raw: string): Promise<GenerateStreamResult> {
+    // First paint: never trust model process-talk. Always the friendly done line.
+    const text = options.earlyComplete
+      ? fallback
+      : shortenUserFacingReply(raw, fallback)
+    options.handlers?.onStatus?.("reply")
+    await emitTextChunks(text, options.handlers?.onToken)
+    const saved = await prisma.conversationHistory.create({
+      data: {
+        projectId,
+        type: "TEXT_MESSAGE",
+        from: "ASSISTANT",
+        contents: text,
+      },
+    })
+    return { messageId: saved.id, contents: text }
+  }
+
+  async function finishEarlyWithDoneReply(): Promise<GenerateStreamResult> {
+    if (!options.saveAssistantText) {
+      return { messageId: null, contents: null }
+    }
+    // Prefer the known-good fallback (saves a whole LLM round). Optionally ask
+    // the model for a one-liner when we have no fallback - still no tools.
+    if (options.fallbackReply?.trim()) {
+      console.log(`[generate] ${projectId} early-complete with fallbackReply`)
+      return persistAssistantText(fallback)
+    }
+
+    messages.push({
+      role: "system",
+      content:
+        "The site is complete enough. Do not call any tools. Reply with ONE short user-facing sentence that it is ready. No file names, no process talk.",
+    })
+
+    const completion = await getDeepseek().chat.completions.create({
+      model: "deepseek-v4-flash",
+      messages,
+      thinking: { type: "disabled" },
+    } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming)
+    const raw = completion.choices[0]?.message?.content?.trim() ?? ""
+    console.log(`[generate] ${projectId} early-complete after final no-tools turn`)
+    return persistAssistantText(raw)
+  }
+
   for (let step = 0; step < maxSteps; step++) {
     // DeepSeek Node SDK: pass thinking as a top-level body field (Python uses extra_body).
     // Disable for codegen tool loops (speed/reliability). Still pass reasoning_content when present.
@@ -550,21 +728,7 @@ async function runToolLoop(
 
     if (toolCalls.length === 0) {
       if (options.saveAssistantText) {
-        const text = shortenUserFacingReply(
-          content?.trim() ?? "",
-          options.fallbackReply
-        )
-        options.handlers?.onStatus?.("reply")
-        await emitTextChunks(text, options.handlers?.onToken)
-        const saved = await prisma.conversationHistory.create({
-          data: {
-            projectId,
-            type: "TEXT_MESSAGE",
-            from: "ASSISTANT",
-            contents: text,
-          },
-        })
-        return { messageId: saved.id, contents: text }
+        return persistAssistantText(content?.trim() ?? "")
       }
       return { messageId: null, contents: null }
     }
@@ -578,13 +742,25 @@ async function runToolLoop(
       reasoning_content,
     } as ChatCompletionMessageParam)
 
-    for (const call of toolCalls) {
+    // Run every tool call in this step (parallel when possible) so multi-file
+    // first paint does not serialize writeFile round trips.
+    const callResults = await Promise.all(
+      toolCalls.map(async (call) => {
+        if (call.type !== "function") {
+          return { call, result: "Unsupported tool call" as string }
+        }
+        recordWriteStats(writes, call.function.name, call.function.arguments)
+        const result = await runTool(
+          sandbox,
+          call.function.name,
+          call.function.arguments
+        )
+        return { call, result }
+      })
+    )
+
+    for (const { call, result } of callResults) {
       if (call.type !== "function") continue
-      const result = await runTool(
-        sandbox,
-        call.function.name,
-        call.function.arguments
-      )
       await prisma.conversationHistory.create({
         data: {
           projectId,
@@ -605,22 +781,19 @@ async function runToolLoop(
         content: result,
       })
     }
+
+    // Speed win: once entry + several solid sections exist, stop burning steps.
+    if (
+      options.earlyComplete &&
+      step >= EARLY_COMPLETE_MIN_STEP &&
+      siteLooksSubstantial(writes)
+    ) {
+      return await finishEarlyWithDoneReply()
+    }
   }
 
   if (options.saveAssistantText) {
-    const text =
-      "Stopped after too many file edits. Check the preview and tell me what to change."
-    options.handlers?.onStatus?.("reply")
-    await emitTextChunks(text, options.handlers?.onToken)
-    const saved = await prisma.conversationHistory.create({
-      data: {
-        projectId,
-        type: "TEXT_MESSAGE",
-        from: "ASSISTANT",
-        contents: text,
-      },
-    })
-    return { messageId: saved.id, contents: text }
+    return persistAssistantText(fallback)
   }
   return { messageId: null, contents: null }
 }
@@ -637,6 +810,12 @@ async function runTool(sandbox: Sandbox, name: string, rawArgs: string) {
       const { path, contents } = writeSchema.parse(args)
       await writeProjectFile(sandbox, path, contents)
       return `Wrote ${path}`
+    }
+    if (name === "writeFiles") {
+      const { files } = writeFilesSchema.parse(args)
+      await writeProjectFiles(sandbox, files)
+      const paths = files.map((f) => f.path)
+      return `Wrote ${paths.length} files: ${paths.join(", ")}`
     }
     if (name === "updateFile") {
       const { path, contents } = writeSchema.parse(args)

@@ -412,6 +412,14 @@ export async function listProjectFiles(sandboxId: string) {
   return files
 }
 
+/** Paths only (no content reads). Prefer this for the LLM project file list. */
+export async function listProjectPaths(sandboxId: string) {
+  const sandbox = await connectSandbox(sandboxId)
+  const paths: string[] = []
+  await walkPaths(sandbox, PROJECT_DIR, "", paths)
+  return paths
+}
+
 export async function readProjectFile(sandboxId: string, relativePath: string) {
   const sandbox = await connectSandbox(sandboxId)
   return readSandboxFile(sandbox, relativePath)
@@ -461,6 +469,25 @@ async function walkFiles(
   }
 }
 
+async function walkPaths(
+  sandbox: Sandbox,
+  absDir: string,
+  relDir: string,
+  out: string[]
+) {
+  const entries = await sandbox.files.list(absDir)
+  for (const entry of entries) {
+    if (SKIP_DIRS.has(entry.name) || entry.name === ".DS_Store") continue
+    const childAbs = `${absDir}/${entry.name}`
+    const childRel = relDir ? `${relDir}/${entry.name}` : entry.name
+    if (entry.type === FileType.DIR) {
+      await walkPaths(sandbox, childAbs, childRel, out)
+    } else if (entry.type === FileType.FILE) {
+      out.push(childRel)
+    }
+  }
+}
+
 export async function writeProjectFile(
   sandbox: Sandbox,
   relativePath: string,
@@ -469,6 +496,20 @@ export async function writeProjectFile(
   await sandbox.files.write(
     toSandboxPath(relativePath),
     preserveDevServerBind(relativePath, contents)
+  )
+}
+
+/** Batch write: one sandbox round-trip for many files (HMR-friendly first paint). */
+export async function writeProjectFiles(
+  sandbox: Sandbox,
+  files: Array<{ path: string; contents: string }>
+) {
+  if (files.length === 0) return
+  await sandbox.files.write(
+    files.map((file) => ({
+      path: toSandboxPath(file.path),
+      data: preserveDevServerBind(file.path, file.contents),
+    }))
   )
 }
 
