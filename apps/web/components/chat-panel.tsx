@@ -355,7 +355,10 @@ export function ChatPanel({
   void centered
   const stackDisabled = stackBusy || cooking
   const isStreaming = streamingText !== null
-  const showWorking = cooking && !displayedStream
+  const hasReadyReply = messages.some(
+    (m) => m.from === "ASSISTANT" && /your site is ready/i.test(m.contents)
+  )
+  const showWorking = cooking && !displayedStream && !hasReadyReply
   const showStack = Boolean(stackVisible && onConfirmStack && !stackBusy)
   const mascotState: ZunoMascotState = isStreaming
     ? "streaming"

@@ -473,8 +473,6 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
 
   const phase = project.phase
   const planning = phase === "PLANNING"
-  const generating =
-    (project?.isGenerating ?? true) || streamingText !== null
   const briefLocked = Boolean(project?.brief?.trim())
   const messages = (() => {
     const raw =
@@ -496,10 +494,17 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
     }
     return out
   })()
+  // Defensive: ready reply + preview means UI should not keep cooking on stale poll
+  const hasReadyReply = messages.some(
+    (m) => m.from === "ASSISTANT" && /your site is ready/i.test(m.contents)
+  )
+  const generating =
+    streamingText !== null ||
+    (Boolean(project.isGenerating) &&
+      !(hasReadyReply && Boolean(project.previewUrl)))
   const chatCooking =
     generating && messages.some((message) => message.from === "USER")
-  // Morph stays up until the entire site is generated (isGenerating/stream done).
-  // Preview URL may appear earlier; product intent is animation until full gen finishes.
+  // Morph stays up until gen fully done (isGenerating/stream). Clears when server sets isGenerating false.
   const showOverlay = !planning && generating
   const workspaceLocked = showOverlay
   const splitChatWidth = chatCollapsed ? 0 : CHAT_WIDTH

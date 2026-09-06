@@ -828,6 +828,34 @@ function recordWriteStats(
   }
 }
 
+
+// Gate the done reply: ensure preview is up, smoke ok, then persist READY+previewUrl
+async function ensurePreviewReadyForDone(
+  projectId: string,
+  sandbox: Sandbox,
+  framework: "nextjs" | "react"
+) {
+  const port = framework === "nextjs" ? 3000 : 5173
+  const kind = framework === "nextjs" ? "next" : "vite"
+  await ensureDevServer(sandbox, port, kind)
+  const smoke = await smokeLocalPreview(sandbox, port)
+  if (!smoke.ok) {
+    throw new Error(
+      `Preview not ready for done reply: ${smoke.detail.slice(0, 400)}`
+    )
+  }
+  const previewUrl = getPreviewUrl(sandbox, port)
+  await prisma.project.update({
+    where: { id: projectId },
+    data: {
+      previewUrl,
+      phase: "READY",
+      isGenerating: false,
+    },
+  })
+  return previewUrl
+}
+
 async function runToolLoop(
   projectId: string,
   sandbox: Sandbox,
@@ -900,26 +928,39 @@ async function runToolLoop(
     if (!options.saveAssistantText) {
       return { messageId: null, contents: null }
     }
+    // Never save ready without a live previewUrl and isGenerating false
+    if (options.earlyComplete) {
+      await ensurePreviewReadyForDone(projectId, sandbox, framework)
+    }
     // Prefer the known done line. If missing, ask the model for one short reply with no tools.
+    let result: GenerateStreamResult
     if (options.fallbackReply?.trim()) {
       console.log(`[generate] ${projectId} early-complete with fallbackReply`)
-      return persistAssistantText(fallback)
+      result = await persistAssistantText(fallback)
+    } else {
+      messages.push({
+        role: "system",
+        content:
+          "The site is complete enough. Do not call any tools. Reply with ONE short user-facing sentence that it is ready. No file names, no process talk.",
+      })
+
+      const completion = await getDeepseek().chat.completions.create({
+        model: "deepseek-v4-flash",
+        messages,
+        thinking: { type: "disabled" },
+      } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming)
+      const raw = completion.choices[0]?.message?.content?.trim() ?? ""
+      console.log(`[generate] ${projectId} early-complete after final no-tools turn`)
+      result = await persistAssistantText(raw)
     }
-
-    messages.push({
-      role: "system",
-      content:
-        "The site is complete enough. Do not call any tools. Reply with ONE short user-facing sentence that it is ready. No file names, no process talk.",
-    })
-
-    const completion = await getDeepseek().chat.completions.create({
-      model: "deepseek-v4-flash",
-      messages,
-      thinking: { type: "disabled" },
-    } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming)
-    const raw = completion.choices[0]?.message?.content?.trim() ?? ""
-    console.log(`[generate] ${projectId} early-complete after final no-tools turn`)
-    return persistAssistantText(raw)
+    // Idempotent: ready reply must leave generating cleared
+    if (options.earlyComplete) {
+      await prisma.project.update({
+        where: { id: projectId },
+        data: { isGenerating: false },
+      })
+    }
+    return result
   }
 
   for (let step = 0; step < stepLimit; step++) {
@@ -1163,6 +1204,22 @@ async function runToolLoop(
             })
             continue
           }
+          try {
+            await ensurePreviewReadyForDone(projectId, sandbox, framework)
+          } catch (error) {
+            const detail =
+              error instanceof Error ? error.message : String(error)
+            console.log(
+              `[generate] ${projectId} preview ensure failed; continuing: ${detail.slice(0, 240)}`
+            )
+            messages.push({
+              role: "system",
+              content:
+                "Preview is not ready yet. Keep the app loading on the preview port, fix crashes, then finish.\n" +
+                detail.slice(0, 1200),
+            })
+            continue
+          }
           return await finishEarlyWithDoneReply()
         }
         // Never stop early or give up while @/ imports are unresolved
@@ -1203,6 +1260,11 @@ async function runToolLoop(
         `First paint incomplete: preview is crashing. ${smoke.detail.slice(0, 400)}`
       )
     }
+    await ensurePreviewReadyForDone(projectId, sandbox, framework)
+    if (options.saveAssistantText) {
+      return await finishEarlyWithDoneReply()
+    }
+    return { messageId: null, contents: null }
   }
 
   if (options.saveAssistantText) {
