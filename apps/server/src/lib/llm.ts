@@ -422,7 +422,7 @@ async function runGeneration(
     messages.push({
       role: "system",
       content:
-        "First paint (speed + quality): (1) Briefly commit to art direction and a section list (nav, hero, rich sections, CTA, footer). Keep that planning short and never dump it in the final user reply. (2) In the SAME tool round, write the entry page AND several section components together: prefer writeFiles with multiple {path, contents}, or multiple writeFile calls. Every tool call in a step runs. (3) Steps 1-2 must land a polished shell (layout/globals tokens if needed, nav, hero, entry composition) so HMR shows something finished-looking quickly; steps 3-4 enrich remaining sections. (4) Prefer complete file writes over tiny edits. The project file list is already provided: do not re-list or re-read the whole tree; read only files you must patch. (5) Full marketing sites are allowed. Match the quality bar. Never leave the placeholder page. Do not change package.json scripts or vite/next server host/port settings. (6) As soon as nav, hero, multiple rich sections, CTA, and footer are in place and look finished, stop calling tools and reply with one short done sentence.",
+        "First paint (speed + quality): (1) Briefly commit to art direction and a section list (nav, hero, rich sections, CTA, footer). Keep that planning short and never dump it in the final user reply. (2) In the SAME tool round, write the entry page AND every section component it imports together: prefer writeFiles with multiple {path, contents}. Never import @/components/X unless that file is included in the same writeFiles (or already exists). (3) Steps 1-2 must land a polished shell (layout/globals tokens if needed, nav, hero, entry composition) so HMR shows something finished-looking quickly; steps 3-4 enrich remaining sections. (4) Prefer complete file writes over tiny edits. The project file list is already provided: do not re-list or re-read the whole tree; read only files you must patch. (5) Full marketing sites are allowed. Match the quality bar. Never leave the placeholder page. Do not change package.json scripts or vite/next server host/port settings. (6) As soon as nav, hero, multiple rich sections, CTA, and footer are in place, every import resolves, and the site looks finished, stop calling tools and reply with one short done sentence.",
     })
   }
 
@@ -445,6 +445,8 @@ async function runGeneration(
       handlers,
       fallbackReply: opts?.firstPaint ? FIRST_PAINT_DONE_REPLY : DEFAULT_DONE_REPLY,
       earlyComplete: Boolean(opts?.firstPaint),
+      framework: project.framework,
+      initialPaths: filePaths,
     }
   )
 }
@@ -516,6 +518,122 @@ function isSectionComponentPath(path: string) {
   return /(^|\/)(src\/)?components\//.test(n)
 }
 
+/** Specifiers like "@/components/Nav" from import/export/dynamic-import lines. */
+function extractAtImports(source: string): string[] {
+  const found = new Set<string>()
+  const re = /(?:from\s+|import\s*\(\s*)["'](@\/[^"']+)["']/g
+  let match: RegExpExecArray | null
+  while ((match = re.exec(source))) {
+    const spec = match[1]
+    if (spec) found.add(spec)
+  }
+  return [...found]
+}
+
+/**
+ * Map an @/ import to possible on-disk paths.
+ * Vite templates alias @ → src/; Next templates alias @/* → ./*
+ */
+function atImportCandidates(
+  spec: string,
+  framework: "nextjs" | "react"
+): string[] {
+  const rest = spec.replace(/^@\//, "").replace(/\\/g, "/")
+  if (!rest || rest.includes("..")) return []
+  const root =
+    framework === "nextjs"
+      ? rest
+      : rest.startsWith("src/")
+        ? rest
+        : `src/${rest}`
+  const normalized = normalizeProjectPath(root)
+  if (/\.(tsx|ts|jsx|js|css|json)$/.test(normalized)) {
+    return [normalized]
+  }
+  return [
+    `${normalized}.tsx`,
+    `${normalized}.ts`,
+    `${normalized}.jsx`,
+    `${normalized}.js`,
+    `${normalized}/index.tsx`,
+    `${normalized}/index.ts`,
+    `${normalized}/index.jsx`,
+    `${normalized}/index.js`,
+  ]
+}
+
+function pathSetHas(known: Set<string>, candidates: string[]) {
+  for (const c of candidates) {
+    if (known.has(normalizeProjectPath(c))) return true
+  }
+  return false
+}
+
+function entryPathFromWrites(writes: Map<string, number>): string | null {
+  let best: string | null = null
+  let bestBytes = -1
+  for (const [path, bytes] of writes) {
+    if (isEntryPagePath(path) && bytes >= bestBytes) {
+      best = path
+      bestBytes = bytes
+    }
+  }
+  return best
+}
+
+/**
+ * Returns unresolved @/ imports from the entry (and recently written section files).
+ * Blocks "site ready" when App imports Nav but Nav.tsx was never written.
+ */
+async function findMissingAtImports(opts: {
+  sandbox: Sandbox
+  writes: Map<string, number>
+  writeContents: Map<string, string>
+  knownPaths: Set<string>
+  framework: "nextjs" | "react"
+}): Promise<string[]> {
+  const { sandbox, writes, writeContents, knownPaths, framework } = opts
+  const known = new Set(
+    [...knownPaths, ...writes.keys()].map((p) => normalizeProjectPath(p))
+  )
+
+  const scanPaths = new Set<string>()
+  const entry = entryPathFromWrites(writes)
+  if (entry) scanPaths.add(entry)
+  for (const path of writes.keys()) {
+    if (isSectionComponentPath(path) || isEntryPagePath(path)) {
+      scanPaths.add(path)
+    }
+  }
+
+  const missing: string[] = []
+  const seenSpec = new Set<string>()
+
+  for (const path of scanPaths) {
+    // Always read from sandbox so editFile patches are not missed.
+    let source: string
+    try {
+      source = await readSandboxFile(sandbox, path)
+      writeContents.set(path, source)
+    } catch {
+      source = writeContents.get(path) ?? ""
+      if (!source) continue
+    }
+    for (const spec of extractAtImports(source)) {
+      if (seenSpec.has(spec)) continue
+      seenSpec.add(spec)
+      // Skip css / asset side-effect imports that aren't components
+      if (/\.(css|scss|sass|less|svg|png|jpe?g|webp|gif)$/i.test(spec)) continue
+      const candidates = atImportCandidates(spec, framework)
+      if (candidates.length === 0) continue
+      if (!pathSetHas(known, candidates)) {
+        missing.push(spec)
+      }
+    }
+  }
+  return missing
+}
+
 /** True when this generation already wrote a finished-looking marketing shell. */
 function siteLooksSubstantial(writes: Map<string, number>) {
   let entryBytes = 0
@@ -540,6 +658,8 @@ function siteLooksSubstantial(writes: Map<string, number>) {
 
 function recordWriteStats(
   writes: Map<string, number>,
+  writeContents: Map<string, string>,
+  knownPaths: Set<string>,
   name: string,
   rawArgs: string
 ) {
@@ -548,10 +668,10 @@ function recordWriteStats(
     if (name === "writeFile" || name === "updateFile") {
       const parsed = writeSchema.safeParse(args)
       if (parsed.success) {
-        writes.set(
-          normalizeProjectPath(parsed.data.path),
-          parsed.data.contents.length
-        )
+        const path = normalizeProjectPath(parsed.data.path)
+        writes.set(path, parsed.data.contents.length)
+        writeContents.set(path, parsed.data.contents)
+        knownPaths.add(path)
       }
       return
     }
@@ -559,10 +679,10 @@ function recordWriteStats(
       const parsed = writeFilesSchema.safeParse(args)
       if (parsed.success) {
         for (const file of parsed.data.files) {
-          writes.set(
-            normalizeProjectPath(file.path),
-            file.contents.length
-          )
+          const path = normalizeProjectPath(file.path)
+          writes.set(path, file.contents.length)
+          writeContents.set(path, file.contents)
+          knownPaths.add(path)
         }
       }
     }
@@ -581,10 +701,19 @@ async function runToolLoop(
     handlers?: GenerateStreamHandlers
     fallbackReply?: string
     earlyComplete?: boolean
+    framework?: string | null
+    initialPaths?: string[]
   }
 ): Promise<GenerateStreamResult> {
   const fallback = doneReply(options.fallbackReply)
   const writes = new Map<string, number>()
+  const writeContents = new Map<string, string>()
+  const knownPaths = new Set(
+    (options.initialPaths ?? []).map((p) => normalizeProjectPath(p))
+  )
+  const framework: "nextjs" | "react" =
+    options.framework === "nextjs" ? "nextjs" : "react"
+  let importRepairNudge = 0
 
   async function persistAssistantText(raw: string): Promise<GenerateStreamResult> {
     // First paint: never trust model process-talk. Always the friendly done line.
@@ -732,6 +861,34 @@ async function runToolLoop(
     }
 
     if (toolCalls.length === 0) {
+      if (options.earlyComplete && importRepairNudge < 2) {
+        const missing = await findMissingAtImports({
+          sandbox,
+          writes,
+          writeContents,
+          knownPaths,
+          framework,
+        })
+        if (missing.length > 0) {
+          importRepairNudge += 1
+          console.log(
+            `[generate] ${projectId} blocked done reply; missing imports: ${missing.join(", ")}`
+          )
+          messages.push({
+            role: "assistant",
+            content: content,
+            reasoning_content,
+          } as ChatCompletionMessageParam)
+          messages.push({
+            role: "system",
+            content:
+              `CRITICAL: Do not finish yet. These @/ imports are unresolved (file missing): ${missing.join(", ")}. ` +
+              `Use writeFiles NOW to create each missing component with a named export matching the import. ` +
+              `Do not claim the site is ready until every import resolves.`,
+          })
+          continue
+        }
+      }
       if (options.saveAssistantText) {
         return persistAssistantText(content?.trim() ?? "")
       }
@@ -754,7 +911,13 @@ async function runToolLoop(
         if (call.type !== "function") {
           return { call, result: "Unsupported tool call" as string }
         }
-        recordWriteStats(writes, call.function.name, call.function.arguments)
+        recordWriteStats(
+          writes,
+          writeContents,
+          knownPaths,
+          call.function.name,
+          call.function.arguments
+        )
         const result = await runTool(
           sandbox,
           call.function.name,
@@ -788,12 +951,35 @@ async function runToolLoop(
     }
 
     // Speed win: once entry + several solid sections exist, stop burning steps.
+    // Never early-complete while entry/section files still import missing @/ modules.
     if (
       options.earlyComplete &&
       step >= EARLY_COMPLETE_MIN_STEP &&
       siteLooksSubstantial(writes)
     ) {
-      return await finishEarlyWithDoneReply()
+      const missing = await findMissingAtImports({
+        sandbox,
+        writes,
+        writeContents,
+        knownPaths,
+        framework,
+      })
+      if (missing.length === 0) {
+        return await finishEarlyWithDoneReply()
+      }
+      if (importRepairNudge < 3) {
+        importRepairNudge += 1
+        console.log(
+          `[generate] ${projectId} early-complete blocked; missing: ${missing.join(", ")}`
+        )
+        messages.push({
+          role: "system",
+          content:
+            `CRITICAL: Generation is incomplete. Unresolved @/ imports: ${missing.join(", ")}. ` +
+            `writeFiles those components immediately (named exports, file names matching imports). ` +
+            `Do not stop until they exist.`,
+        })
+      }
     }
   }
 
