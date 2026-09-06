@@ -1144,18 +1144,21 @@ async function runToolLoop(
     }> = []
     for (const { call, result } of callResults) {
       if (call.type !== "function") continue
-      historyRows.push({
-        projectId,
-        type: "TOOL_CALL",
-        from: "ASSISTANT",
-        hidden: true,
-        toolCall: KIND[call.function.name],
-        contents: JSON.stringify({
-          name: call.function.name,
-          arguments: call.function.arguments,
-          result,
-        }),
-      })
+      const toolCall = KIND[call.function.name]
+      if (toolCall) {
+        historyRows.push({
+          projectId,
+          type: "TOOL_CALL",
+          from: "ASSISTANT",
+          hidden: true,
+          toolCall,
+          contents: JSON.stringify({
+            name: call.function.name,
+            arguments: call.function.arguments,
+            result,
+          }),
+        })
+      }
       messages.push({
         role: "tool",
         tool_call_id: call.id,

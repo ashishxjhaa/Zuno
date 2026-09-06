@@ -9,6 +9,6 @@ export const LANDING_IDEAS = [
   "A kids' coding club site with courses, a parent FAQ, and a bright signup form.",
 ] as const
 
-export function pickLandingIdea() {
+export function pickLandingIdea(): string {
   return LANDING_IDEAS[Math.floor(Math.random() * LANDING_IDEAS.length)]!
 }
