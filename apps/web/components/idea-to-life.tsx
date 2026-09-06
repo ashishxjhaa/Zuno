@@ -176,7 +176,7 @@ const CARDS: BentoCard[] = [
   {
     label: "Landing",
     title: "Landing pages",
-    blurb: "Hero, proof, and a clear CTA — ready to ship from one prompt.",
+    blurb: "Hero, proof, and a clear CTA - ready to ship from one prompt.",
     accent: "#ff5800",
     well: "#FFF1E8",
     Art: LandingArt,
@@ -194,7 +194,7 @@ const CARDS: BentoCard[] = [
   {
     label: "Apps",
     title: "Full-stack apps",
-    blurb: "Dashboards, auth flows, and live data — preview as you chat.",
+    blurb: "Dashboards, auth flows, and live data - preview as you chat.",
     accent: "#7C5CFC",
     well: "#EDE4FF",
     Art: AppArt,
@@ -208,7 +208,7 @@ const CARDS: BentoCard[] = [
   {
     label: "Marketing",
     title: "Marketing sites",
-    blurb: "Campaign pages that convert — hierarchy and polish built in.",
+    blurb: "Campaign pages that convert - hierarchy and polish built in.",
     accent: "#E67E22",
     well: "#FFE8CC",
     Art: MarketingArt,

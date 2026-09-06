@@ -244,7 +244,7 @@ function ZunoAvatar({ state }: { state: ZunoMascotState }) {
   )
 }
 
-/** Reveal server stream buffer word-by-word for a typewriter feel. */
+/** Reveal stream text word-by-word. */
 function useWordStream(streamingText: string | null) {
   const [displayed, setDisplayed] = useState("")
   const targetRef = useRef("")
@@ -293,7 +293,6 @@ export function ChatPanel({
   stackVisible = false,
   stackBusy = false,
   onConfirmStack,
-  centered = false,
   streamingText = null,
 }: {
   messages: ChatMessage[]

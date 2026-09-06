@@ -11,9 +11,6 @@ const VB = DEMI_VIEWBOX
 const R = RAYON
 const SVG_NS = "http://www.w3.org/2000/svg"
 
-/** Zuno logo radial gradient (matches public/zuno.svg) */
-const ZUNO_GRAD_INNER = "#f5af19"
-const ZUNO_GRAD_OUTER = "#f12711"
 /** Solid brand for dots / particle mixHex */
 const ZUNO_INK = "#f12711"
 
@@ -100,7 +97,7 @@ function syncArcGrad(
   arc: ArcRender,
   slot: number
 ) {
-  // Only mutate dedicated arc-grad host — never touch mask / brand fills in defs
+  // Only mutate dedicated arc-grad host - never touch mask / brand fills in defs
   let grad = host.children[slot] as SVGLinearGradientElement | undefined
   if (!grad || grad.tagName.toLowerCase() !== "lineargradient") {
     while (host.children.length > slot) {
@@ -450,7 +447,7 @@ export function GrokBotMorph({
         height: size,
         display: "block",
         lineHeight: 0,
-        // No CSS filters — keep vector edges razor-sharp
+        // No CSS filters - keep vector edges razor-sharp
         filter: "none",
       }}
       aria-hidden={false}

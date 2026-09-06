@@ -6,7 +6,6 @@ import { cn } from "@workspace/ui/lib/utils"
 export type ZunoMascotState = "idle" | "thinking" | "streaming"
 
 export function ZunoMascot({
-  state = "idle",
   size = 22,
   className,
 }: {

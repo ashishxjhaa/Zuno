@@ -71,7 +71,7 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
   const [publishing, setPublishing] = useState(false)
   const [stackBusy, setStackBusy] = useState(false)
   const [chatCollapsed, setChatCollapsed] = useState(false)
-  const [previewReady, setPreviewReady] = useState(false)
+  const [, setPreviewReady] = useState(false)
   const [previewRevision, setPreviewRevision] = useState(0)
   const [streamingText, setStreamingText] = useState<string | null>(null)
   const [streamStatus, setStreamStatus] = useState<"tools" | "reply" | null>(

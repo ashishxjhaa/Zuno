@@ -3,7 +3,7 @@ import { SEQUENCE, STATES, STATE_BY_ID, type StateId } from './states'
 /**
  * Un cycle est un montage : une suite de blocs, chacun un etat tenu pendant une
  * duree choisie. C'est la partie "editeur" du dossier, et elle en garde les
- * regles — donnees pures, aucune horloge, aucun import Vue : le meme cycle doit
+ * regles - donnees pures, aucune horloge, aucun import Vue : le meme cycle doit
  * pouvoir etre relu par les tests, par le lecteur et par la timeline.
  *
  * Un bloc n'a pas d'identifiant : c'est une position dans une liste, la cle de
@@ -27,7 +27,7 @@ export interface Cycle {
  * bloc suivant saute a l'image au lieu de se fondre.
  *
  * DERIVE du catalogue et non ecrit a la main. La valeur etait 0,6, ce qui marchait
- * uniquement parce que 0,6 se trouvait etre le plus long `morph` du catalogue — celui
+ * uniquement parce que 0,6 se trouvait etre le plus long `morph` du catalogue - celui
  * d'`orbit`. Rien ne le garantissait : ajouter un etat qui morphe en 0,8 s aurait fait
  * trembler l'editeur sans qu'aucun test ne bronche. Maintenant le plancher suit.
  */
@@ -79,7 +79,7 @@ export function makeBlock(state: StateId): Block {
 /**
  * Le montage releve sur la video : l'ordre de `SEQUENCE`, chaque etat tenu sa
  * duree mesuree. Il sert d'amorce au premier lancement, puis il appartient a
- * l'utilisateur — il s'edite et se stocke comme les autres. La reference, elle,
+ * l'utilisateur - il s'edite et se stocke comme les autres. La reference, elle,
  * reste dans le code : vider le stockage la fait revenir.
  */
 export function defaultCycle(): Cycle {
@@ -132,7 +132,7 @@ export function blockAt(blocks: Block[], t: number): { index: number; elapsed: n
  *
  * Plafonnee a `MAX_BLOCS`, comme la relecture. Sans ca l'editeur laissait construire un
  * montage plus grand que ce que le stockage rend au rechargement, et le travail
- * disparaissait en silence — une borne de relecture qui n'est pas aussi une borne d'edition
+ * disparaissait en silence - une borne de relecture qui n'est pas aussi une borne d'edition
  * est un piege, pas une protection.
  */
 export function blocksWith(blocks: Block[], state: StateId): Block[] {
@@ -149,7 +149,7 @@ export function moveBlock(blocks: Block[], from: number, to: number): Block[] {
   return next
 }
 
-/** `Mon cycle`, `Mon cycle 2`, `Mon cycle 3`... — jamais deux fois le meme nom. */
+/** `Mon cycle`, `Mon cycle 2`, `Mon cycle 3`... - jamais deux fois le meme nom. */
 export function uniqueName(base: string, cycles: Cycle[]): string {
   const taken = new Set(cycles.map((c) => c.name))
   if (!taken.has(base)) return base
@@ -173,7 +173,7 @@ function parseBlock(raw: unknown): Block | null {
   const { state, duration } = raw as { state?: unknown; duration?: unknown }
   /*
    * Valide contre SEQUENCE et non contre `STATE_BY_ID` : ce dernier contient `swirl`, qui
-   * est deliberement hors du catalogue — c'est la transition d'entree des reglages, un
+   * est deliberement hors du catalogue - c'est la transition d'entree des reglages, un
    * test la verrouille hors de la palette et de la planche. Un montage utilisateur ne se
    * construit qu'a partir de la palette, donc un `swirl` ne peut y arriver que par un
    * stockage bricole a la main, et il n'y a aucune raison de l'y tolerer quand on l'exclut
@@ -188,7 +188,7 @@ function parseCycle(raw: unknown, seen: Cycle[]): Cycle | null {
   if (typeof raw !== 'object' || raw === null) return null
   const { id, name, blocks } = raw as { id?: unknown; name?: unknown; blocks?: unknown }
   if (typeof id !== 'string' || !id) return null
-  // le nom peut etre vide — c'est le montage d'amorce, qui suit la langue
+  // le nom peut etre vide - c'est le montage d'amorce, qui suit la langue
   if (typeof name !== 'string') return null
   if (!Array.isArray(blocks)) return null
   // on tronque AVANT de relire : valider 150 000 blocs pour n'en garder que 200 serait

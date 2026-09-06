@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { CommandExitError, FileType, Sandbox } from "e2b"
+import { FileType, Sandbox } from "e2b"
 
 const PROJECT_DIR = "/home/user/project"
 const SKIP_DIRS = new Set(["node_modules", "dist", ".git", ".vite", ".next"])
@@ -11,10 +11,7 @@ const TEMPLATES_ROOT = path.join(
 )
 const DEV_LOG = "/tmp/zuno-dev-server.log"
 const SNAPSHOT_TAR = "/tmp/zuno-snapshot.tar.gz"
-/**
- * Next cold compile can block HTTP for several seconds after the port opens.
- * Prefer a fast TCP probe so hung page compiles do not burn the wait budget.
- */
+/** Prefer TCP probe; Next can block HTTP while compiling. */
 const WAIT_ATTEMPTS = 60
 const WAIT_MS = 250
 
@@ -74,10 +71,7 @@ export function getPreviewUrl(sandbox: Sandbox, port: number) {
   return `https://${sandbox.getHost(port)}`
 }
 
-/**
- * Prefer a prebaked E2B template (bun + node_modules + app scaffold).
- * Cold path copies local templates and runs bun install (misses 10-12s SLA).
- */
+/** Prefer prebaked E2B template; cold path installs deps. */
 export async function createSandboxWithTemplate(
   framework?: string | null,
   language?: string | null
@@ -189,13 +183,7 @@ export async function installDependencies(sandbox: Sandbox) {
   }
 }
 
-/**
- * Start the stack's package.json "dev" script (or a node/vite|next fallback).
- * Retries once with fresh logs if the port never opens.
- *
- * Prebaked E2B images sometimes lack the bun binary at runtime even when
- * node_modules exist. Prefer bun when present; otherwise run Next/Vite via node.
- */
+/** Start package.json dev script; retry once if the port never opens. */
 export async function startDevServer(
   sandbox: Sandbox,
   port: number,
@@ -302,30 +290,6 @@ async function readDevLog(sandbox: Sandbox) {
   }
 }
 
-export async function buildProduction(sandbox: Sandbox) {
-  console.log(`[build] ${sandbox.sandboxId} ...`)
-  try {
-    const has = await hasBun(sandbox)
-    const cmd = has
-      ? "/home/user/.bun/bin/bun run build"
-      : "node ./node_modules/vite/bin/vite.js build 2>/dev/null || node ./node_modules/next/dist/bin/next build"
-    await sandbox.commands.run(cmd, {
-      cwd: PROJECT_DIR,
-      timeoutMs: 180_000,
-      envs: bunEnv(),
-    })
-    return { ok: true as const }
-  } catch (error) {
-    const detail =
-      error instanceof CommandExitError
-        ? [error.stderr, error.stdout].filter(Boolean).join("\n").trim()
-        : error instanceof Error
-          ? error.message
-          : "Build failed"
-    console.error(`[build] ${sandbox.sandboxId} failed`, detail.slice(0, 2000))
-    return { ok: false as const, error: detail || "Build failed" }
-  }
-}
 
 async function killPortListener(sandbox: Sandbox, port: number) {
   const killCommands = [
@@ -530,7 +494,7 @@ export async function updateProjectFile(
   if (trimmed.length + 64 < current.length && current.includes(trimmed)) {
     throw new Error(
       `Refused: contents are only a fragment of the existing ${relativePath}. ` +
-        `updateFile replaces the WHOLE file — resend the complete file, or use editFile for a targeted edit.`
+        `updateFile replaces the WHOLE file - resend the complete file, or use editFile for a targeted edit.`
     )
   }
   await sandbox.files.write(
@@ -539,11 +503,7 @@ export async function updateProjectFile(
   )
 }
 
-/**
- * Targeted in-place edit: replace exact `find` text with `replace`.
- * Fails safely when the anchor is missing or ambiguous, so files can
- * never be silently truncated by partial overwrites.
- */
+/** Replace exact find text; fail if missing or ambiguous. */
 export async function editProjectFile(
   sandbox: Sandbox,
   relativePath: string,
@@ -588,9 +548,7 @@ export async function readSandboxFile(sandbox: Sandbox, relativePath: string) {
   return sandbox.files.read(toSandboxPath(relativePath))
 }
 
-/**
- * Keep Vite/Next reachable from the E2B preview proxy if the LLM rewrites config.
- */
+/** Keep Vite/Next reachable if the LLM rewrites config. */
 export function preserveDevServerBind(relativePath: string, contents: string) {
   const normalized = relativePath.replace(/\\/g, "/").replace(/^\/+/, "")
   const base = normalized.split("/").pop() || normalized

@@ -1,4 +1,5 @@
-# Same server-only image when Railway Root Directory = apps/server
+# EC2 API image when build context is apps/server.
+# Example: docker build -t zuno-api -f apps/server/Dockerfile apps/server
 FROM oven/bun:1.3
 WORKDIR /app
 

@@ -70,5 +70,3 @@ Execution:
 If the user later asks for an edit, change only what they asked for and leave the rest.`
 }
 
-/** @deprecated Prefer buildSystemPrompt with project stack. */
-export const SYSTEM_PROMPT = buildSystemPrompt()

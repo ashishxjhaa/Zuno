@@ -1,4 +1,5 @@
-# Server-only image (API). Build context = repo root so Railway finds this file.
+# EC2 API image only (frontend deploys on Vercel).
+# Build from repo root: docker build -t zuno-api .
 FROM oven/bun:1.3
 WORKDIR /app
 

@@ -252,7 +252,7 @@ export async function pushProjectToGithub(req: Request, res: Response) {
       owner: user.githubUsername,
       repoName: requestedName,
       existingFullName: project.githubRepoFullName,
-      description: `Generated with Zuno — ${project.title}`,
+      description: `Generated with Zuno - ${project.title}`,
     })
 
     const push = await pushFilesToRepo(octokit, {
@@ -260,7 +260,7 @@ export async function pushProjectToGithub(req: Request, res: Response) {
       repo: repo.repo,
       defaultBranch: repo.defaultBranch,
       files,
-      message: `Push from Zuno — ${project.title}`,
+      message: `Push from Zuno - ${project.title}`,
     })
 
     const updated = await prisma.project.update({

@@ -475,11 +475,7 @@ async function runGeneration(
   )
 }
 
-/**
- * The final reply is shown verbatim in chat. Self-review and rule-talk
- * (file names, dash/typography lectures, "X is intact") must never reach
- * the user - fall back to a plain completion message instead.
- */
+/** Strip self-review/rule-talk from the final chat reply. */
 const META_REPLY_HARD_RE =
   /\b[\w.-]+\.(tsx|jsx|ts|js|css|json|html|md)\b|\b(em|en)[\s‐-―-]?dash|\btypograph|\bintact\b|\bthe ban\b|\b(className|classname|shadcn|tailwind|variant|props?|export(?:s|ed)?|import(?:s|ed)?|component(?:s)?)\b|\bfiles? are in place\b|\boverrid(?:e|ing)\b|\bcursor-pointer\b/i
 const META_REPLY_SOFT_RE =
@@ -554,10 +550,7 @@ function extractAtImports(source: string): string[] {
   return [...found]
 }
 
-/**
- * Map an @/ import to possible on-disk paths.
- * Vite templates alias @ → src/; Next templates alias @/* → ./*
- */
+/** Map an @/ import to possible on-disk paths for this stack. */
 function atImportCandidates(
   spec: string,
   framework: "nextjs" | "react"
@@ -605,10 +598,7 @@ function entryPathFromWrites(writes: Map<string, number>): string | null {
   return best
 }
 
-/**
- * Returns unresolved @/ imports from the entry (and recently written section files).
- * Blocks "site ready" when App imports Nav but Nav.tsx was never written.
- */
+/** Unresolved @/ imports from entry and recent writes. */
 async function findMissingAtImports(opts: {
   sandbox: Sandbox
   writes: Map<string, number>
@@ -714,10 +704,7 @@ function readJsonStringAt(
   return null
 }
 
-/**
- * Recover writeFiles payloads when the model emits truncated/invalid JSON
- * (common with large multi-file first paints). Returns only complete path/contents pairs.
- */
+/** Recover complete path/contents pairs from truncated writeFiles JSON. */
 function recoverWriteFilesArgs(
   rawArgs: string
 ): Array<{ path: string; contents: string }> {
@@ -743,7 +730,7 @@ function recoverWriteFilesArgs(
     }
     const contentsStart = pathStr.end + contentsKey[0].length
     const contentsStr = readJsonStringAt(rawArgs, contentsStart)
-    if (!contentsStr) break // truncated last file — keep prior complete ones
+    if (!contentsStr) break // truncated last file - keep prior complete ones
     if (pathStr.value.trim()) {
       files.push({ path: pathStr.value, contents: contentsStr.value })
     }
@@ -938,7 +925,7 @@ async function runToolLoop(
       OpenAI.Chat.ChatCompletionMessage["tool_calls"]
     > = []
 
-    // First paint already includes the project file list — skip readFile so the
+    // First paint already includes the project file list - skip readFile so the
     // model cannot burn 2-3 rounds reading templates before writeFiles.
     const stepTools = options.earlyComplete
       ? tools.filter(
@@ -1150,7 +1137,7 @@ async function runToolLoop(
             content:
               "First paint incomplete. In this SAME tool round, write the entry page AND every section component " +
               "(nav, hero, multiple rich sections, CTA, footer) via writeFiles OR multiple writeFile calls together. " +
-              "Do not write only CSS/tokens. Keep full design quality — do not omit sections.",
+              "Do not write only CSS/tokens. Keep full design quality - do not omit sections.",
           })
         }
       } else {

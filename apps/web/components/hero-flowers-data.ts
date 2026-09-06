@@ -1,4 +1,4 @@
-/** Flower placements cloned from make.design hero layers. */
+/** Hero flower placements. */
 
 export const DESKTOP_FLOWERS = [
   {

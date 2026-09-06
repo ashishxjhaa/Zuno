@@ -42,7 +42,7 @@ const PENDING_PROMPT_KEY = "zuno:landing-prompt"
 
 type AnimIconHandle = { startAnimation: () => void; stopAnimation: () => void }
 
-/** AnimateIcons only hover-animate on the SVG node — drive them from the whole row. */
+/** Drive AnimateIcons hover from the whole row. */
 function RowAnimIcon({
   icon: Icon,
   active,
@@ -185,7 +185,7 @@ export function PromptBox({ variant = "default" }: PromptBoxProps) {
   const openProject = (project: ProjectListItem) => {
     if (restoringId) return
     // Always navigate first. Restore used to run here and a dead sandbox /
-    // missing snapshot 409'd — so the click looked like it did nothing.
+    // missing snapshot 409'd - so the click looked like it did nothing.
     setMenuOpen(false)
     setProjectsOpen(false)
     setRestoringId(project.id)

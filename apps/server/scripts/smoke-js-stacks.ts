@@ -92,7 +92,7 @@ async function findMissing(
 }
 
 async function createSmokeProject(userId: string, label: string) {
-  const brief = `SMOKE TEST ${label}: Build a tiny polished one-page marketing site for "Lumen Desk" — a calm focus timer. Include nav, hero, one features section, CTA, footer. Keep it small but complete. Prefer rounded-sm. No purple SaaS clichés.`
+  const brief = `SMOKE TEST ${label}: Build a tiny polished one-page marketing site for "Lumen Desk" - a calm focus timer. Include nav, hero, one features section, CTA, footer. Keep it small but complete. Prefer rounded-sm. No purple SaaS clichés.`
   const project = await prisma.project.create({
     data: {
       title: `SMOKE ${label}`,

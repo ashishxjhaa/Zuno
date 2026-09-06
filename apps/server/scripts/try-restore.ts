@@ -46,7 +46,7 @@ if (project.sandboxId) {
 }
 
 if (!project.snapshotKey) {
-  console.error("NO SNAPSHOT — open would 409")
+  console.error("NO SNAPSHOT - open would 409")
   await prisma.$disconnect()
   process.exit(2)
 }

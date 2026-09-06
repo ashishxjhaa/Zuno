@@ -48,7 +48,7 @@ function renderInline(text: string, keyOffset: number): ReactNode[] {
   return nodes
 }
 
-/** Lightweight markdown: **bold**, *italic*, `code`, and newlines. No HTML. */
+/** Lightweight markdown only; no HTML. */
 export function ChatMarkdown({ text }: { text: string }) {
   const lines = text.split("\n")
   const nodes: ReactNode[] = []

@@ -36,7 +36,7 @@ export function ShaderRibbon({ className }: { className?: string }) {
       resize()
       const w = canvas.width
       const h = canvas.height
-      // Slow drift — keep gentle, never the old hover speed
+      // Slow drift - keep gentle, never the old hover speed
       const speed = reduceMotion ? 0 : 0.008
       t += speed
 
