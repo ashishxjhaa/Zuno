@@ -5,7 +5,18 @@ import {
   stackSchema,
 } from "../lib/schema"
 import { prisma } from "../lib/prisma"
-import { extendSandboxTimeout, listProjectFiles } from "../lib/e2b"
+import {
+  applyProjectSnapshot,
+  connectSandbox,
+  createSandboxWithTemplate,
+  ensureDevServer,
+  extendSandboxTimeout,
+  getPreviewUrl,
+  installDependencies,
+  listProjectFiles,
+  resolveTemplate,
+} from "../lib/e2b"
+import { downloadSnapshot } from "../lib/s3"
 import { generateForProject } from "../lib/llm"
 import { confirmStackAndBuild, runIntakeTurnStreaming } from "../lib/intake"
 import { initSse, keepAliveSse, sendSse } from "../lib/sse"
@@ -47,6 +58,36 @@ export async function create(req: Request, res: Response) {
 
     // Client opens conversation SSE with resume:true to stream the first intake reply.
     return res.status(201).json({ id: project.id })
+  } catch {
+    return res.status(500).json({
+      error: "Internal server error",
+    })
+  }
+}
+
+
+export async function list(req: Request, res: Response) {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ error: "Unauthorized" })
+    }
+
+    const projects = await prisma.project.findMany({
+      where: { userId: req.userId },
+      orderBy: [{ lastActiveAt: "desc" }, { updatedAt: "desc" }],
+      select: {
+        id: true,
+        title: true,
+        phase: true,
+        framework: true,
+        language: true,
+        snapshotAt: true,
+        lastActiveAt: true,
+        updatedAt: true,
+      },
+    })
+
+    return res.status(200).json({ projects })
   } catch {
     return res.status(500).json({
       error: "Internal server error",
@@ -378,6 +419,112 @@ export async function publish(req: Request, res: Response) {
   } catch {
     return res.status(500).json({
       error: "Internal server error",
+    })
+  }
+}
+
+export async function restore(req: Request, res: Response) {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ error: "Unauthorized" })
+    }
+
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id
+    if (!id) {
+      return res.status(400).json({ error: "Project id is required" })
+    }
+
+    const project = await prisma.project.findUnique({ where: { id } })
+    if (!project || project.userId !== req.userId) {
+      return res.status(404).json({ error: "Project not found" })
+    }
+
+    if (!project.framework || !project.language) {
+      return res.status(409).json({ error: "Project has no stack yet" })
+    }
+
+    const info = resolveTemplate(project.framework, project.language)
+
+    // Reuse a live sandbox when possible.
+    if (project.sandboxId) {
+      try {
+        const live = await connectSandbox(project.sandboxId)
+        await ensureDevServer(live, info.port, info.kind)
+        const previewUrl = getPreviewUrl(live, info.port)
+        const updated = await prisma.project.update({
+          where: { id },
+          data: {
+            previewUrl,
+            phase: "READY",
+            lastActiveAt: new Date(),
+            isGenerating: false,
+          },
+        })
+        return res.status(200).json({
+          id: updated.id,
+          title: updated.title,
+          previewUrl: updated.previewUrl,
+          phase: updated.phase,
+          framework: updated.framework,
+          language: updated.language,
+        })
+      } catch (error) {
+        console.warn(`[restore] reuse failed ${id}`, error)
+      }
+    }
+
+    if (!project.snapshotKey) {
+      return res.status(409).json({
+        error: "No snapshot available for this project yet",
+      })
+    }
+
+    const archive = await downloadSnapshot(project.snapshotKey)
+    const created = await createSandboxWithTemplate(
+      project.framework,
+      project.language
+    )
+    const { sandbox, template, prebaked } = created
+
+    try {
+      await applyProjectSnapshot(sandbox, archive)
+      if (!prebaked) {
+        await installDependencies(sandbox)
+      }
+      await ensureDevServer(sandbox, template.port, template.kind)
+      const previewUrl = getPreviewUrl(sandbox, template.port)
+
+      const updated = await prisma.project.update({
+        where: { id },
+        data: {
+          sandboxId: sandbox.sandboxId,
+          previewUrl,
+          phase: "READY",
+          lastActiveAt: new Date(),
+          isGenerating: false,
+        },
+      })
+
+      return res.status(200).json({
+        id: updated.id,
+        title: updated.title,
+        previewUrl: updated.previewUrl,
+        phase: updated.phase,
+        framework: updated.framework,
+        language: updated.language,
+      })
+    } catch (error) {
+      try {
+        await sandbox.kill()
+      } catch {
+        // ignore
+      }
+      throw error
+    }
+  } catch (error) {
+    console.error(`[restore]`, error)
+    return res.status(500).json({
+      error: "Could not restore project",
     })
   }
 }

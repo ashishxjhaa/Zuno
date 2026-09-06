@@ -148,3 +148,29 @@ export async function confirmProjectStack(
     language,
   })
 }
+
+export type ProjectListItem = {
+  id: string
+  title: string
+  phase: ProjectPhase
+  framework: string | null
+  language: string | null
+  snapshotAt: string | null
+  lastActiveAt: string
+  updatedAt: string
+}
+
+export async function listProjects() {
+  return frontend.get<{ projects: ProjectListItem[] }>("/api/v1/project")
+}
+
+export async function restoreProject(projectId: string) {
+  return frontend.post<{
+    id: string
+    title: string
+    previewUrl: string | null
+    phase: ProjectPhase
+    framework: string | null
+    language: string | null
+  }>(`/api/v1/project/${projectId}/restore`)
+}

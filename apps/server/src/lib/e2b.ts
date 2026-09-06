@@ -10,6 +10,7 @@ const TEMPLATES_ROOT = path.join(
   "../../templates"
 )
 const DEV_LOG = "/tmp/zuno-dev-server.log"
+const SNAPSHOT_TAR = "/tmp/zuno-snapshot.tar.gz"
 /**
  * Next cold compile can block HTTP for several seconds after the port opens.
  * Prefer a fast TCP probe so hung page compiles do not burn the wait budget.
@@ -649,6 +650,57 @@ export function preserveDevServerBind(relativePath: string, contents: string) {
   }
 
   return contents
+}
+
+
+/** Pack sandbox source into a gzip tarball (excludes deps, builds, caches). */
+export async function packProjectSnapshot(sandboxId: string): Promise<Uint8Array> {
+  const sandbox = await connectSandbox(sandboxId)
+  const excludes = [
+    "node_modules",
+    ".next",
+    "dist",
+    ".git",
+    ".vite",
+    ".turbo",
+    ".cache",
+    "coverage",
+    ".DS_Store",
+  ]
+    .map((name) => `--exclude=${name}`)
+    .join(" ")
+  const pack = await sandbox.commands.run(
+    `rm -f ${SNAPSHOT_TAR} && cd ${PROJECT_DIR} && tar czf ${SNAPSHOT_TAR} ${excludes} .`,
+    { timeoutMs: 120_000 }
+  )
+  if (pack.exitCode !== 0) {
+    throw new Error(pack.stderr || pack.stdout || "Failed to pack snapshot")
+  }
+  return sandbox.files.read(SNAPSHOT_TAR, { format: "bytes" })
+}
+
+/** Extract a snapshot tarball into the sandbox project directory. */
+export async function applyProjectSnapshot(
+  sandbox: Sandbox,
+  archive: Uint8Array
+) {
+  const bytes =
+    archive instanceof Uint8Array ? archive : new Uint8Array(archive)
+  const ab = bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength
+  ) as ArrayBuffer
+  await sandbox.files.write(SNAPSHOT_TAR, ab)
+  // Keep node_modules from the template; replace everything else with the snapshot.
+  const extract = await sandbox.commands.run(
+    `mkdir -p ${PROJECT_DIR} && cd ${PROJECT_DIR} && find . -mindepth 1 -maxdepth 1 ! -name node_modules -exec rm -rf {} + && tar xzf ${SNAPSHOT_TAR} -C ${PROJECT_DIR} && rm -f ${SNAPSHOT_TAR}`,
+    { timeoutMs: 120_000 }
+  )
+  if (extract.exitCode !== 0) {
+    throw new Error(
+      extract.stderr || extract.stdout || "Failed to extract snapshot"
+    )
+  }
 }
 
 function toSandboxPath(relativePath: string) {

@@ -51,6 +51,8 @@ model Project {
   brief               String?
   sandboxId           String?
   previewUrl          String?
+  snapshotKey         String?
+  snapshotAt          DateTime?
   published           Boolean                @default(false)
   isGenerating        Boolean                @default(false)
   lastActiveAt        DateTime               @default(now())

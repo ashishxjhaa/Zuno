@@ -4,6 +4,7 @@ import { z } from "zod"
 import type { Sandbox } from "e2b"
 import type { ToolCallKind } from "../generated/prisma/client"
 import { prisma } from "./prisma"
+import { queueSaveProjectSnapshot } from "./snapshot"
 import {
   connectSandbox,
   createSandboxWithTemplate,
@@ -259,6 +260,8 @@ export async function startProjectBuild(projectId: string) {
       } catch (error) {
         console.error(`[bootstrap] ${projectId} post-gen ensureDevServer`, error)
       }
+
+      queueSaveProjectSnapshot(projectId)
     } catch (genError) {
       console.error(`[bootstrap] ${projectId} generation`, genError)
       try {
@@ -351,6 +354,8 @@ export async function generateForProject(
       const sandbox = await connectSandbox(project.sandboxId)
       await ensureDevServer(sandbox, info.port, info.kind)
     }
+
+    queueSaveProjectSnapshot(projectId)
   } catch (error) {
     console.error(`[generate] ${projectId}`, error)
     // Do not kill sandbox / clear previewUrl on LLM errors after preview is up.
