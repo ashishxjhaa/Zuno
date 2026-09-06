@@ -39,6 +39,8 @@
   <img src="https://shieldcn.dev/badge/PostgreSQL-Neon-4169E1.svg?logo=postgresql&variant=branded&size=sm" alt="PostgreSQL" />
   <img src="https://shieldcn.dev/badge/E2B-sandbox-FF5800.svg?logo=lu:Box&variant=default&size=sm" alt="E2B" />
   <img src="https://shieldcn.dev/badge/DeepSeek-AI-4D6BFE.svg?logo=lu:Sparkles&variant=default&size=sm" alt="DeepSeek" />
+  <img src="https://shieldcn.dev/badge/AWS-EC2-FF9900.svg?logo=amazonec2&variant=branded&size=sm" alt="AWS EC2" />
+  <img src="https://shieldcn.dev/badge/Nginx-proxy-009639.svg?logo=nginx&variant=branded&size=sm" alt="Nginx" />
   <img src="https://shieldcn.dev/badge/Turborepo-monorepo-EF4444.svg?logo=turborepo&variant=branded&size=sm" alt="Turborepo" />
 </p>
 
@@ -50,6 +52,8 @@
   <a href="#getting-started"><strong>Getting Started</strong></a>
   ·
   <a href="#architecture"><strong>Architecture</strong></a>
+  ·
+  <a href="#deployment"><strong>Deployment</strong></a>
   ·
   <a href="https://ashishjha.xyz/"><strong>Author</strong></a>
 </p>
@@ -121,6 +125,7 @@ Built as a full-stack + AI portfolio product: auth, projects, sandboxes, publish
 | **Sandboxes** | E2B (Vite React + Next templates, JS/TS) |
 | **AI** | DeepSeek (site generation + chat tools) |
 | **Export** | GitHub OAuth + Octokit push, JSZip download |
+| **Hosting** | Single AWS EC2 instance, PM2, Nginx, Let's Encrypt |
 | **Monorepo** | Turborepo + Bun workspaces |
 
 ---
@@ -130,25 +135,30 @@ Built as a full-stack + AI portfolio product: auth, projects, sandboxes, publish
 ```text
 Zuno/
 ├── apps/
-│   ├── web/       # Next.js frontend  → :3000  (Vercel)
-│   └── server/    # Bun + Express API → :4000  (EC2 Docker)
+│   ├── web/       # Next.js frontend  → :3000  (EC2 + PM2)
+│   └── server/    # Bun + Express API → :4000  (EC2 + PM2)
 ├── packages/
 │   └── ui/        # Shared UI primitives
 ├── docs/images/   # README screenshots
-├── Dockerfile     # Server-only image for EC2
 └── package.json
 ```
 
-| Service | Role | Deploy |
+Production is one AWS EC2 host. Nginx terminates HTTPS and routes public hostnames to the local processes.
+
+| Service | Role | Production |
 | :--- | :--- | :--- |
-| `apps/web` | Landing, auth, builder (preview, code, chat, GitHub, download) | Vercel |
-| `apps/server` | REST API, Prisma, E2B, DeepSeek, GitHub OAuth, idle reaper | EC2 (Docker) |
+| `apps/web` | Landing, auth, builder (preview, code, chat, GitHub, download) | EC2 + PM2 on `:3000` → [zuno.ashishjha.xyz](https://zuno.ashishjha.xyz) |
+| `apps/server` | REST API, Prisma, E2B, DeepSeek, GitHub OAuth, idle reaper | EC2 + PM2 on `:4000` → [api.zuno.ashishjha.xyz](https://api.zuno.ashishjha.xyz) |
+| Nginx | Reverse proxy + TLS | Let's Encrypt via Certbot |
+| Neon | PostgreSQL | Managed database |
 
 ```mermaid
 flowchart LR
-    user[User] --> web[Next.js web]
-    web -->|JWT cookie| api[Express API]
-    api --> postgres[PostgreSQL]
+    user[User] --> nginx[Nginx + Let's Encrypt]
+    nginx -->|zuno.ashishjha.xyz| web[Next.js :3000]
+    nginx -->|api.zuno.ashishjha.xyz| api[Express API :4000]
+    web -->|JWT cookie| api
+    api --> postgres[Neon PostgreSQL]
     api --> e2b[E2B sandbox]
     api --> deepseek[DeepSeek]
     api --> github[GitHub API]
@@ -214,20 +224,7 @@ cd apps/web && bun run dev      # http://localhost:3000
 
 Open [http://localhost:3000](http://localhost:3000).
 
-### Docker (API on EC2)
-
-Build the **server-only** image from the repo root (frontend stays on Vercel):
-
-```bash
-docker build -t zuno-api .
-docker run --env-file apps/server/.env -p 4000:4000 zuno-api
-```
-
-Or with context `apps/server`:
-
-```bash
-docker build -t zuno-api -f apps/server/Dockerfile apps/server
-```
+Production runs on a single EC2 instance (PM2 + Nginx). See [Deployment](#deployment).
 
 ---
 
@@ -239,20 +236,20 @@ docker build -t zuno-api -f apps/server/Dockerfile apps/server
 | :--- | :--- | :--- |
 | `DATABASE_URL` | Yes | Postgres connection string |
 | `JWT_SECRET` | Yes | Auth token signing |
-| `FRONTEND_URL` | Yes | Web origin (`http://localhost:3000` locally; production Vercel URL, no trailing slash) |
+| `FRONTEND_URL` | Yes | Web origin (`http://localhost:3000` locally; `https://zuno.ashishjha.xyz` in production; no trailing slash) |
 | `E2B_API_KEY` | Yes | E2B sandbox API key |
 | `DEEPSEEK_API_KEY` | Yes | DeepSeek API key |
 | `PORT` | No | API port (default `4000`) |
 | `E2B_TEMPLATE_REACT_TS` / `_JS` / `NEXT_TS` / `NEXT_JS` | Prod speed | Prebaked template aliases |
 | `GITHUB_CLIENT_ID` | GitHub push | OAuth App client ID |
 | `GITHUB_CLIENT_SECRET` | GitHub push | OAuth App client secret |
-| `GITHUB_CALLBACK_URL` | GitHub push | Must match OAuth callback, e.g. `http://localhost:4000/api/v1/github/oauth/callback` |
+| `GITHUB_CALLBACK_URL` | GitHub push | Must match the OAuth App callback (`http://localhost:4000/api/v1/github/oauth/callback` locally; `https://api.zuno.ashishjha.xyz/api/v1/github/oauth/callback` in production) |
 
 ### `apps/web/.env`
 
 | Variable | Required | Purpose |
 | :--- | :--- | :--- |
-| `NEXT_PUBLIC_API_URL` | Yes | API origin only (e.g. `http://localhost:4000`). Do not append `/api/v1` |
+| `NEXT_PUBLIC_API_URL` | Yes | API origin only (`http://localhost:4000` locally; `https://api.zuno.ashishjha.xyz` in production). Do not append `/api/v1` |
 
 ---
 
@@ -304,21 +301,115 @@ GitHub OAuth + push live under `/api/v1/github/*` (connect popup, link repo, pus
 
 ## Deployment
 
-**Do not deploy `apps/server` on Vercel.** The API is a long-running Bun + Express process (background E2B builds, idle reaper, `app.listen`). Vercel serverless will fail at runtime.
+Zuno is fully self-hosted on a **single AWS EC2 instance**. Next.js and the Bun API run under PM2 on loopback; Nginx reverse-proxies public HTTPS hostnames to those ports. TLS is Let's Encrypt via Certbot. Postgres is [Neon](https://neon.tech). Sandboxes are E2B; generation uses DeepSeek; GitHub push uses a GitHub OAuth App.
 
-| App | Host | Notes |
-| :--- | :--- | :--- |
-| `apps/web` | **Vercel** | Root Directory `apps/web`. Set `NEXT_PUBLIC_API_URL` to the public API origin. |
-| `apps/server` | **EC2 (Docker)** | Use the root `Dockerfile` (server only). Set env vars, run `prisma migrate deploy`, expose `:4000`. |
+| Public URL | Nginx routes to |
+| :--- | :--- |
+| [https://zuno.ashishjha.xyz](https://zuno.ashishjha.xyz) | `127.0.0.1:3000` (Next.js 16) |
+| [https://api.zuno.ashishjha.xyz](https://api.zuno.ashishjha.xyz) | `127.0.0.1:4000` (Bun + Express) |
 
-Production checklist:
+| Process | How it runs |
+| :--- | :--- |
+| Frontend | `apps/web` — `next start` on port **3000**, managed by PM2 |
+| Backend | `apps/server` — Bun + Express on port **4000**, managed by PM2 |
+| Reverse proxy | Nginx on **80** / **443** |
+| TLS | Let's Encrypt + Certbot |
+| Database | Neon PostgreSQL |
 
-1. Set `FRONTEND_URL` on the API to the exact Vercel origin (no trailing slash).
-2. Set `NEXT_PUBLIC_API_URL` on Vercel to the EC2 API origin (no `/api/v1`), then **redeploy web** (it is inlined at build time).
-3. Auth cookies use `SameSite=None; Secure` in production so the Vercel site can call the API with credentials.
-4. Point the GitHub OAuth callback at `https://<api-host>/api/v1/github/oauth/callback`.
+The API is a long-running process (background E2B builds, idle reaper, `app.listen`). It is not a serverless function.
 
-Live site: [https://zuno.ashishjha.xyz](https://zuno.ashishjha.xyz)
+### Host and DNS
+
+1. Provision an Ubuntu EC2 instance. Allow inbound **22**, **80**, and **443**.
+2. Point both DNS A records at the instance public IP:
+   - `zuno.ashishjha.xyz`
+   - `api.zuno.ashishjha.xyz`
+3. Install Bun (`>= 1.3`), Node.js (`>= 20`), Nginx, Certbot, and PM2.
+
+### App on the instance
+
+```bash
+git clone https://github.com/ashishxjhaa/Zuno.git
+cd Zuno
+bun install
+cp apps/server/.env.example apps/server/.env
+cp apps/web/.env.example apps/web/.env
+```
+
+Set production values (no trailing slashes):
+
+- `FRONTEND_URL=https://zuno.ashishjha.xyz`
+- `NEXT_PUBLIC_API_URL=https://api.zuno.ashishjha.xyz`
+- `GITHUB_CALLBACK_URL=https://api.zuno.ashishjha.xyz/api/v1/github/oauth/callback`
+
+Then migrate and build:
+
+```bash
+cd apps/server && bunx prisma migrate deploy
+cd ../.. && bun run build
+```
+
+`NEXT_PUBLIC_API_URL` is inlined at build time. Rebuild the web app if it changes.
+
+### PM2
+
+```bash
+cd apps/server && pm2 start "bun src/index.ts" --name zuno-api
+cd ../web && pm2 start "bun run start" --name zuno-web
+pm2 save && pm2 startup
+```
+
+### Nginx and TLS
+
+Nginx proxies by hostname:
+
+- `zuno.ashishjha.xyz` → `http://127.0.0.1:3000`
+- `api.zuno.ashishjha.xyz` → `http://127.0.0.1:4000`
+
+Example server blocks (HTTP; Certbot will add SSL):
+
+```nginx
+server {
+    listen 80;
+    server_name zuno.ashishjha.xyz;
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+
+server {
+    listen 80;
+    server_name api.zuno.ashishjha.xyz;
+    location / {
+        proxy_pass http://127.0.0.1:4000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Issue certificates:
+
+```bash
+sudo certbot --nginx -d zuno.ashishjha.xyz -d api.zuno.ashishjha.xyz
+```
+
+### Checklist
+
+1. `FRONTEND_URL` is `https://zuno.ashishjha.xyz` (no trailing slash).
+2. `NEXT_PUBLIC_API_URL` is `https://api.zuno.ashishjha.xyz` (no `/api/v1`), then rebuild web.
+3. Auth cookies use `SameSite=None; Secure` in production so credentialed requests from the web origin to the API origin succeed.
+4. GitHub OAuth callback is `https://api.zuno.ashishjha.xyz/api/v1/github/oauth/callback`.
+
+Live site: [https://zuno.ashishjha.xyz](https://zuno.ashishjha.xyz) · API: [https://api.zuno.ashishjha.xyz](https://api.zuno.ashishjha.xyz)
 
 ---
 
