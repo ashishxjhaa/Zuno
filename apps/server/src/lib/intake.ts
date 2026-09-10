@@ -10,7 +10,7 @@ type ReadyPayload = {
   title?: string
 }
 
-export type IntakeStreamResult = {
+type IntakeStreamResult = {
   visible: string
   messageId: string
   brief: string | null
@@ -30,6 +30,44 @@ function getDeepseek() {
   })
 }
 
+const STACK_LOCK_COPY = "Got it. Choose a stack below to start building."
+
+const NOT_AN_IDEA =
+  /^(hi|hey|hello|yo|sup|hi there|hello there|thanks|thank you|ok|okay|yes|no|please|help|what(?:'s| is) (this|up)|who are you|what can you do)[\s!?.]*$/i
+
+function isBuildableIdea(text: string): boolean {
+  const t = text.trim()
+  if (t.length < 3) return false
+  return !NOT_AN_IDEA.test(t)
+}
+
+function historyHasBuildableIdea(
+  history: { from: string; contents: string }[]
+): boolean {
+  return history.some(
+    (row) => row.from === "USER" && isBuildableIdea(row.contents)
+  )
+}
+
+function briefFromUserTurns(
+  history: { from: string; contents: string }[]
+): { brief: string; title: string } {
+  const parts = history
+    .filter((row) => row.from === "USER")
+    .map((row) => row.contents.trim())
+    .filter(Boolean)
+  const brief =
+    parts.join("\n\n").trim() ||
+    "Build a polished marketing site from the user's idea."
+  const title = (parts[0] ?? "New project")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 6)
+    .join(" ")
+    .slice(0, 80)
+  return { brief, title }
+}
+
 function readyFromObject(parsed: Record<string, unknown>): ReadyPayload | null {
   if (parsed.ready !== true) return null
   const brief = String(parsed.brief ?? "").trim()
@@ -42,7 +80,7 @@ function readyFromObject(parsed: Record<string, unknown>): ReadyPayload | null {
 }
 
 // Find the ready JSON block at the end of the model reply
-export function parseReadyPayload(text: string): ReadyPayload | null {
+function parseReadyPayload(text: string): ReadyPayload | null {
   const fences = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)]
   for (let i = fences.length - 1; i >= 0; i--) {
     const candidate = fences[i]?.[1]?.trim()
@@ -73,7 +111,7 @@ export function parseReadyPayload(text: string): ReadyPayload | null {
 }
 
 // Remove the ready JSON block from the chat message
-export function stripReadyMarker(text: string): string {
+function stripReadyMarker(text: string): string {
   let out = text.replace(/```(?:json)?\s*[\s\S]*?```/gi, "").trim()
   const readyIdx = out.lastIndexOf('"ready"')
   if (readyIdx >= 0) {
@@ -90,13 +128,11 @@ export function stripReadyMarker(text: string): string {
       }
     }
   }
-  return out || "Got it. Choose a stack below to start building."
+  return out || STACK_LOCK_COPY
 }
 
-// Stream intake replies. onToken may still see ready JSON until we strip it
 export async function runIntakeTurnStreaming(
-  projectId: string,
-  onToken?: (text: string) => void
+  projectId: string
 ): Promise<IntakeStreamResult | null> {
   const project = await prisma.project.findUnique({ where: { id: projectId } })
   if (!project || project.phase !== "PLANNING") {
@@ -131,7 +167,6 @@ export async function runIntakeTurnStreaming(
       const delta = chunk.choices[0]?.delta?.content
       if (!delta) continue
       raw += delta
-      onToken?.(delta)
     }
   } catch (error) {
     console.error(`[intake] stream ${projectId}`, error)
@@ -140,7 +175,17 @@ export async function runIntakeTurnStreaming(
 
   raw = raw.trim() || "Tell me a bit more about what you want to build."
   const ready = parseReadyPayload(raw)
-  let visible = ready ? stripReadyMarker(raw) : raw
+  // Any real idea locks immediately. The composer is only for greetings / non-ideas.
+  const canLock = Boolean(ready) || historyHasBuildableIdea(history)
+  const synthesized = canLock && !ready ? briefFromUserTurns(history) : null
+  const lockedBrief = ready?.brief ?? synthesized?.brief ?? null
+  const lockedTitle = ready?.title ?? synthesized?.title
+
+  let visible = ready
+    ? stripReadyMarker(raw)
+    : canLock
+      ? STACK_LOCK_COPY
+      : raw
   // Cap intake replies at a few sentences
   const sentences = visible.split(/(?<=[.!?])\s+/).filter(Boolean)
   if (sentences.length > 3) {
@@ -156,22 +201,22 @@ export async function runIntakeTurnStreaming(
     },
   })
 
-  if (ready) {
+  if (lockedBrief) {
     await prisma.project.update({
       where: { id: projectId },
       data: {
         phase: "PLANNING",
         isGenerating: false,
-        brief: ready.brief,
-        ...(ready.title ? { title: ready.title } : {}),
+        brief: lockedBrief,
+        ...(lockedTitle ? { title: lockedTitle } : {}),
         lastActiveAt: new Date(),
       },
     })
     return {
       visible,
       messageId: saved.id,
-      brief: ready.brief,
-      title: ready.title,
+      brief: lockedBrief,
+      title: lockedTitle,
     }
   }
 
@@ -184,32 +229,6 @@ export async function runIntakeTurnStreaming(
     visible,
     messageId: saved.id,
     brief: null,
-  }
-}
-
-// Non-streaming intake fallback
-export async function runIntakeTurn(projectId: string) {
-  try {
-    await runIntakeTurnStreaming(projectId)
-  } catch (error) {
-    console.error(`[intake] ${projectId}`, error)
-    try {
-      await prisma.conversationHistory.create({
-        data: {
-          projectId,
-          type: "TEXT_MESSAGE",
-          from: "ASSISTANT",
-          contents:
-            "Something went wrong while clarifying. Send another message to continue.",
-        },
-      })
-      await prisma.project.update({
-        where: { id: projectId },
-        data: { isGenerating: false, phase: "PLANNING" },
-      })
-    } catch {
-      // ignore
-    }
   }
 }
 

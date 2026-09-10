@@ -59,9 +59,11 @@ function ChatPaneSkeleton({ compact }: { compact?: boolean }) {
           <Skeleton className="h-4 w-2/3" />
         </div>
       </div>
-      <div className={compact ? "p-3" : "px-0 pb-4"}>
-        <Skeleton className={compact ? "h-12 w-full" : "h-[98px] w-full"} />
-      </div>
+      {compact ? (
+        <div className="p-3">
+          <Skeleton className="h-12 w-full" />
+        </div>
+      ) : null}
     </div>
   )
 }

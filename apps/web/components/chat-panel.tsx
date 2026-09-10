@@ -302,7 +302,6 @@ export function ChatPanel({
   stackVisible = false,
   stackBusy = false,
   onConfirmStack,
-  centered = false,
   streamingText = null,
 }: {
   messages: ChatMessage[]
@@ -315,15 +314,17 @@ export function ChatPanel({
     framework: ProjectFramework,
     language: ProjectLanguage
   ) => Promise<void>
-  centered?: boolean
   streamingText?: string | null
-  streamStatus?: "tools" | "reply" | null
 }) {
   const [value, setValue] = useState("")
+  const [sending, setSending] = useState(false)
   const [framework, setFramework] = useState<ProjectFramework>("react")
   const [language, setLanguage] = useState<ProjectLanguage>("typescript")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const displayedStream = useWordStream(streamingText ? stripReadyMarkerLive(streamingText) : null)
+
+  const composerBusy = cooking || sending || stackBusy
+  const showComposer = !planning || (!composerBusy && !stackVisible)
 
   useEffect(() => {
     const textarea = textareaRef.current
@@ -333,13 +334,22 @@ export function ChatPanel({
     textarea.style.height = `${Math.min(textarea.scrollHeight, max)}px`
   }, [value, planning])
 
+  useEffect(() => {
+    if (!showComposer || !planning) return
+    const frame = window.requestAnimationFrame(() => {
+      textareaRef.current?.focus()
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [showComposer, planning])
+
   const submit = async (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault()
     const contents = value.trim()
-    if (!contents || cooking) {
+    if (!contents || composerBusy) {
       return
     }
-    // Clear the input right away so the draft does not linger during the stream
+    // Hide the box immediately so an empty composer does not linger mid-send.
+    setSending(true)
     setValue("")
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto"
@@ -349,10 +359,11 @@ export function ChatPanel({
     } catch {
       // Restore the draft after a failed send so the user can retry
       setValue(contents)
+    } finally {
+      setSending(false)
     }
   }
 
-  void centered
   const stackDisabled = stackBusy || cooking
   const isStreaming = streamingText !== null
   const hasReadyReply = messages.some(
@@ -374,20 +385,16 @@ export function ChatPanel({
             ref={textareaRef}
             value={value}
             onChange={(event) => setValue(event.target.value)}
-            placeholder={
-              stackVisible
-                ? "Or keep clarifying in chat..."
-                : "Answer clarifying questions..."
-            }
+            placeholder="Answer clarifying questions..."
             rows={2}
-            disabled={cooking}
+            disabled={composerBusy}
             aria-label="Message Zuno"
             className="w-full resize-none bg-transparent p-3.5 text-[14.5px] outline-none placeholder:text-slate-400"
             style={{ height: 66, overflowY: "hidden" }}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault()
-                if (cooking) return
+                if (composerBusy) return
                 void submit()
               }
             }}
@@ -395,7 +402,7 @@ export function ChatPanel({
           <div className="flex items-center justify-end gap-2 px-2.5 pb-2.5">
             <button
               type="submit"
-              disabled={cooking || !value.trim()}
+              disabled={composerBusy || !value.trim()}
               aria-label="Submit"
               className={cn(
                 "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-sm bg-[#ff5800] text-white hover:bg-[#e04e00]",
@@ -414,18 +421,19 @@ export function ChatPanel({
             onChange={(event) => setValue(event.target.value)}
             placeholder="Send follow-up"
             rows={1}
+            disabled={composerBusy}
             className="no-scrollbar min-h-8 flex-1 resize-none bg-transparent py-2 text-[13px] leading-5 text-foreground outline-none placeholder:text-muted-foreground"
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault()
-                if (cooking) return
+                if (composerBusy) return
                 void submit()
               }
             }}
           />
           <button
             type="submit"
-            disabled={cooking || !value.trim()}
+            disabled={composerBusy || !value.trim()}
             className={cn(
               "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-sm bg-[#ff5800] text-white hover:bg-[#e04e00]",
               "disabled:pointer-events-none disabled:opacity-40"
@@ -530,16 +538,25 @@ export function ChatPanel({
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       {messageList}
-      {!planning ? (
-        <div
-          className={cn(
-            "shrink-0",
-            planning ? "px-1 pb-4 pt-2 sm:px-0" : "p-3"
-          )}
-        >
-          {inputForm}
-        </div>
-      ) : null}
+      <AnimatePresence initial={false}>
+        {showComposer ? (
+          <motion.div
+            key="chat-composer"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 6 }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            className={cn(
+              "shrink-0",
+              planning ? "px-1 pb-4 pt-2 sm:px-0" : "p-3"
+            )}
+            role="region"
+            aria-label={planning ? "Reply to Zuno" : "Send a follow-up"}
+          >
+            {inputForm}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   )
 }

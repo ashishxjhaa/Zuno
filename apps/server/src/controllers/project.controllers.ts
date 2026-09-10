@@ -232,12 +232,13 @@ export async function conversation(req: Request, res: Response) {
 
   try {
     if (project.phase === "PLANNING") {
-      const result = await runIntakeTurnStreaming(id, emitToken)
+      // Buffer the full intake reply so a discarded clarifying question
+      // cannot flash in the client before we lock the brief.
+      const result = await runIntakeTurnStreaming(id)
       if (!result) {
         sendSse(res, "error", { error: "Intake is not available" })
         return
       }
-      // Replace any raw ready-JSON suffix the client may have shown mid-stream.
       sendSse(res, "replace", { text: result.visible })
       sendSse(res, "done", {
         message: {

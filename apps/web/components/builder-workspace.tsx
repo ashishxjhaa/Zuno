@@ -74,9 +74,6 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
   const [, setPreviewReady] = useState(false)
   const [previewRevision, setPreviewRevision] = useState(0)
   const [streamingText, setStreamingText] = useState<string | null>(null)
-  const [streamStatus, setStreamStatus] = useState<"tools" | "reply" | null>(
-    null
-  )
   const goneRef = useRef(false)
   const streamingRef = useRef(false)
   const resumeAttemptedRef = useRef(false)
@@ -237,7 +234,6 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
       if (streamingRef.current) return
       streamingRef.current = true
       setStreamingText("")
-      setStreamStatus(null)
       const ac = new AbortController()
       abortRef.current = ac
 
@@ -265,25 +261,19 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
         await streamConversation(projectId, body, {
           signal: ac.signal,
           onToken: (text) => {
-            setStreamStatus("reply")
             setStreamingText((prev) => (prev ?? "") + text)
           },
           onReplace: (text) => {
-            setStreamStatus("reply")
             setStreamingText(text)
           },
           onStatus: (status) => {
             if (status === "tools") {
-              setStreamStatus("tools")
               // Hide any premature text if the model switched into tool calls.
               setStreamingText("")
-            } else if (status === "reply") {
-              setStreamStatus("reply")
             }
           },
           onDone: (payload) => {
             setStreamingText(null)
-            setStreamStatus(null)
             setProject((current) => {
               if (!current) return current
               const messages = [...current.messages]
@@ -315,7 +305,6 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
         }
         toastApiError(error)
         setStreamingText(null)
-        setStreamStatus(null)
         setProject((current) =>
           current ? { ...current, isGenerating: false } : current
         )
@@ -326,7 +315,6 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
         streamingRef.current = false
         abortRef.current = null
         setStreamingText(null)
-        setStreamStatus(null)
       }
     },
     [projectId, loadProject]
@@ -518,9 +506,7 @@ export function BuilderWorkspace({ projectId }: { projectId: string }) {
       stackVisible={planning && briefLocked}
       stackBusy={stackBusy}
       onConfirmStack={planning && briefLocked ? onConfirmStack : undefined}
-      centered={planning}
       streamingText={streamingText}
-      streamStatus={streamStatus}
     />
   )
 
